@@ -1,5 +1,6 @@
-/* Repository validation: manifest, locales, required files, JS syntax. */
-import { readFileSync, existsSync } from 'node:fs';
+/* Repository validation: manifest, locales, required files, JS syntax,
+   store image sizes, and submission zip structure. */
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,6 +85,54 @@ if (!csp.includes("connect-src 'none'") || !csp.includes("script-src 'self'")) {
 }
 if (JSON.stringify(manifest.content_scripts?.[0]?.matches) !== JSON.stringify(['https://github.com/*'])) {
   fail('GitHub host access must remain narrow');
+}
+
+// Store image sizes (read PNG IHDR directly, no dependencies).
+const pngSize = (file) => {
+  const buf = readFileSync(file);
+  const pngSig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (!buf.subarray(0, 8).equals(pngSig) || buf.toString('ascii', 12, 16) !== 'IHDR') return null;
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+};
+const assetDir = path.join(root, 'store/assets');
+if (existsSync(assetDir)) {
+  for (const name of readdirSync(assetDir).filter((n) => n.endsWith('.png'))) {
+    const size = pngSize(path.join(assetDir, name));
+    if (!size) {
+      fail(`store asset is not a valid PNG: ${name}`);
+      continue;
+    }
+    const shot = (size.width === 1280 && size.height === 800) || (size.width === 640 && size.height === 400);
+    const promo = size.width === 440 && size.height === 280;
+    if (name.startsWith('promo-') ? !promo : !shot) {
+      fail(`store asset has wrong size ${size.width}x${size.height}: ${name}`);
+    }
+  }
+}
+
+// Submission zip must preserve manifest-referenced paths (no flattening).
+const zipPath = path.join(root, 'dist', `last-comment-extension-${manifest.version}.zip`);
+if (existsSync(zipPath)) {
+  let entries = [];
+  try {
+    entries = execFileSync('tar', ['-tf', zipPath], { encoding: 'utf8' }).split('\n').map((s) => s.trim()).filter(Boolean);
+  } catch (error) {
+    fail(`cannot list submission zip: ${error.message}`);
+  }
+  const referenced = new Set([
+    'manifest.json', 'popup.html', 'options.html', 'welcome.html', 'help.html', 'privacy.html',
+    manifest.background?.service_worker,
+    manifest.action?.default_popup,
+    ...(manifest.action?.default_icon ? Object.values(manifest.action.default_icon) : []),
+    ...(manifest.options_ui?.page ? [manifest.options_ui.page] : []),
+    ...Object.values(manifest.icons || {}),
+    ...(contentScripts?.js || []),
+    '_locales/en/messages.json',
+    '_locales/ko/messages.json'
+  ].filter(Boolean));
+  for (const ref of referenced) {
+    if (!entries.includes(ref)) fail(`submission zip is missing manifest path: ${ref}`);
+  }
 }
 
 if (process.exitCode) {

@@ -9,6 +9,7 @@ All screenshots use English guidance and illustrative data. No private repositor
 | `03-hover-preview-store.png` | Hover preview state. |
 | `04-english-default-store.png` | English-by-default message with Korean available in Settings. |
 | `05-privacy-controls.png` | Local-only statistics controls, disabled by default. |
+| `promo-small-440x280.png` | Small promo tile: icon, name, and tagline on dark background. |
 
 Required Chrome Web Store image sizes:
 

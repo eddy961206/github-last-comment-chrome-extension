@@ -1,5 +1,7 @@
 /* Package runtime files into dist/last-comment-extension-<version>.zip. No dev-only files. */
-import { createWriteStream, readFileSync, mkdirSync, existsSync } from 'node:fs';
+/* Uses tar (Windows bsdtar / GNU tar) so directory structure is preserved
+   on every platform, including the ubuntu release runner. */
+import { readFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,13 +46,10 @@ for (const file of runtimeFiles) {
 }
 
 try {
-  execFileSync('powershell', [
-    '-NoProfile',
-    '-Command',
-    `$files = @(${runtimeFiles.map((f) => `'${f}'`).join(',')}); Compress-Archive -Path $files -DestinationPath '${out}' -Force`
-  ], { cwd: root, stdio: 'inherit' });
+  if (existsSync(out)) rmSync(out);
+  execFileSync('tar', ['-a', '-c', '-f', out, ...runtimeFiles], { cwd: root, stdio: 'inherit' });
   console.log(`package: ${out}`);
 } catch (error) {
-  console.error(`package: failed: ${error.message}`);
+  console.error(`package: failed (tar required): ${error.message}`);
   process.exit(1);
 }
