@@ -7,10 +7,11 @@
     const OWN = 'data-lc-owned', ROW = '[data-testid="issue-row"],[data-testid="pull-request-row"],[data-testid="list-row"],[data-testid="list-view-item"],[data-listview-item-id],.js-issue-row,.Box-row,[role="row"],[role="listitem"],li';
     const LINKS = 'a[href*="/issues/"],a[href*="/pull/"]';
     const sheet = new CSSStyleSheet();
-    sheet.replaceSync(LCStyles);
+    sheet.replaceSync(LCStyles + LCRecency.css);
     let prefs = LC.normalize((await chrome.storage.local.get('preferences')).preferences);
     let transport = new LCTransport(), records = new Map(), cache = new Map(), queue = new Set(), jobs = new Map();
     let current = '', account = '', bar = null, popup = null, timer = null, scanTimer = null, dirty = new Set(), full = true, paused = false, duplicate = false;
+    let timestampTimer = null;
     let previewTimer = null, closingTimer = null, hovered = null, dismissed = null, suppressHover = false, pointer = null;
     const technical = { requests: 0, verified: 0, failures: 0, cacheHits: 0, previews: 0, scans: 0 };
     const t = (key, vars) => LC.t(key, prefs.language, vars), own = n => n?.nodeType === 1 && n.closest(`[${OWN}]`);
@@ -95,7 +96,7 @@
     } }); near.observe(r.link); inView.observe(r.link); paint(r); return r; }
     function remove(r) { queue.delete(r); r.job?.subscribers.delete(r); if (r.job && !r.job.subscribers.size)
         r.job.controller.abort(); near.unobserve(r.link); inView.unobserve(r.link); if (popup?.record === r)
-        closePopup(); r.host.remove(); records.delete(r.link); if (r.layout) {
+        closePopup(); r.host.remove(); records.delete(r.link); if (!records.size) { clearTimeout(timestampTimer); timestampTimer = null; } if (r.layout) {
         const state = layouts.get(r.layout);
         state?.users.delete(r);
         if (state && !state.users.size) {
@@ -108,6 +109,7 @@
     } }
     const ttl = r => r.kind === 'none' ? 60000 : prefs.cacheMinutes * 60000;
     function paint(r) {
+        if (r.timestamp) LCRecency.update(r.timestamp, prefs);
         const data = r.value, stale = !!data && (Date.now() - r.at >= ttl(data) || r.force || !!r.error);
         const type = data?.kind === 'none' ? 'none' : data ? account && data.author.toLowerCase() === account.toLowerCase() ? 'mine' : data.mentionsMe ? 'mention' : data.isBot ? 'bot' : 'other' : r.error ? 'error' : r.state === 'loading' ? 'busy' : 'idle';
         r.host.hidden = !!data && data.kind === 'none' && !prefs.noComments && !stale;
@@ -125,6 +127,7 @@
         const chip = node('span', `chip ${type}${stale ? ' stale' : ''}${r.state === 'loading' ? ' busy' : ''}`);
         chip.setAttribute('aria-busy', String(r.state === 'loading'));
         const main = node(data?.kind === 'comment' ? 'a' : 'span', 'main');
+        r.timestamp = null;
         if (data?.kind === 'comment') {
             main.href = data.commentUrl;
             main.addEventListener('click', e => e.stopPropagation());
@@ -147,7 +150,8 @@
                 else
                     main.append(avatar);
             }
-            main.append(node('span', 'author', data.author ? '@' + data.author : t('unknown')), node('span', 'date', LC.date(data.time, prefs)));
+            r.timestamp = LCRecency.create(data.time, prefs);
+            main.append(node('span', 'author', data.author ? '@' + data.author : t('unknown')), r.timestamp.element);
         }
         else
             main.textContent = data ? t('none') : r.error ? t('failed') : paused ? t('paused') : r.state === 'loading' ? t('loading') : t('queued');
@@ -170,6 +174,7 @@
         root.replaceChildren(line);
         r.chip = chip;
         r.primary = main;
+        if (r.timestamp && timestampTimer === null) refreshTimestamps();
         if (active) {
             const focus = [...root.querySelectorAll('button,a')].find(n => n.className === active);
             focus?.focus({ preventScroll: true });
@@ -177,6 +182,22 @@
         if (popup?.record === r)
             updatePreview();
         updateBar();
+    }
+    // One lightweight clock per page, independent of request pause/cache settings.
+    // Only timestamp spans change; avatars, focus and an open preview are untouched.
+    function refreshTimestamps() {
+        clearTimeout(timestampTimer);
+        timestampTimer = null;
+        if (!prefs.enabled || !kind() || current !== identity() || document.hidden) return;
+        const now = Date.now();
+        let count = 0, delay = 30000;
+        for (const r of records.values()) {
+            if (!r.link.isConnected || !r.timestamp?.element.isConnected) continue;
+            const state = LCRecency.update(r.timestamp, prefs, now);
+            delay = Math.min(delay, state.nextDelay);
+            count++;
+        }
+        if (count) timestampTimer = setTimeout(refreshTimestamps, delay);
     }
     function enqueue(r, force = false) { if (!r.link.isConnected || (!r.near && !force) || r.job)
         return; if (!force && r.value && !r.force && Date.now() - r.at < ttl(r.value))
@@ -290,7 +311,7 @@
         full = true; clearTimeout(scanTimer); if (document.visibilityState !== 'hidden')
         scanTimer = setTimeout(scan, 80); }
     function reset() { closePopup(); cancel(); for (const r of [...records.values()])
-        remove(r); cache.clear(); bar?.remove(); bar = null; current = identity(); account = login(); dirty.clear(); full = true; }
+        remove(r); clearTimeout(timestampTimer); timestampTimer = null; cache.clear(); bar?.remove(); bar = null; current = identity(); account = login(); dirty.clear(); full = true; }
     function scan() {
         scanTimer = null;
         if (current !== identity())
@@ -330,6 +351,7 @@
                 enqueue(r);
         }
         ensureBar();
+        refreshTimestamps();
         if (!timer)
             timer = setTimeout(maintain, 30000);
     }
@@ -537,7 +559,7 @@
     } for (const r of records.values()) {
         r.paintKey = '';
         paint(r);
-    } if (popup?.type === 'settings') {
+    } refreshTimestamps(); if (popup?.type === 'settings') {
         renderBar();
         popup.anchor = bar.shadowRoot.querySelector('.tools button:last-child');
         settingsBody();
@@ -592,13 +614,17 @@
             previewTimer = setTimeout(() => openPreview(r), 160);
         }
     } }, { passive: true });
+    window.addEventListener('focus', refreshTimestamps);
     document.addEventListener('visibilitychange', () => { if (document.hidden) {
+        clearTimeout(timestampTimer);
+        timestampTimer = null;
         closePopup();
         cancel();
         clearTimeout(timer);
         timer = null;
     }
     else {
+        refreshTimestamps();
         schedule();
         pump();
     } });
