@@ -27,7 +27,7 @@ if (JSON.stringify(manifest.permissions) !== JSON.stringify(['storage'])) {
 }
 
 const contentScripts = manifest.content_scripts?.[0];
-const expectedJs = ['src/shared.js', 'src/styles.js', 'src/parser.js', 'src/render.js', 'src/transport.js', 'src/content.js'];
+const expectedJs = ['src/shared.js', 'src/styles.js', 'src/recency.js', 'src/parser.js', 'src/render.js', 'src/transport.js', 'src/content.js'];
 if (!contentScripts || JSON.stringify(contentScripts.js) !== JSON.stringify(expectedJs)) {
   fail(`content_scripts.js must be ${expectedJs.join(', ')}`);
 }
