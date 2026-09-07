@@ -22,6 +22,7 @@ const runtimeFiles = [
   'privacy.html',
   'src/shared.js',
   'src/styles.js',
+  'src/recency.js',
   'src/parser.js',
   'src/render.js',
   'src/transport.js',
