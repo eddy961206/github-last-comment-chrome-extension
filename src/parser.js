@@ -222,21 +222,38 @@
             commentUrl: `${info.url}#issuecomment-${id}`, isBot: str(actor.__typename, actor.type).toLowerCase() === 'bot' || /\[bot\]$/i.test(author),
             mentionsMe: false, _mentionSource: value, _mentionLogin: me };
     }
-    function newest(comments) {
-        let latest = null, latestTime = -Infinity;
-        for (const item of comments.values()) {
-            const stamp = Date.parse(item.time);
-            if (!latest || stamp > latestTime || (stamp === latestTime && BigInt(item.commentId) > BigInt(latest.commentId))) {
-                latest = item;
-                latestTime = stamp;
-            }
-        }
-        if (!latest)
-            return { kind: 'none' };
-        const { commentId, _mentionSource, _mentionLogin, ...result } = latest;
+    function compareComments(a, b) {
+        const delta = Date.parse(a.time) - Date.parse(b.time);
+        if (delta) return delta;
+        const left = BigInt(a.commentId), right = BigInt(b.commentId);
+        return left === right ? 0 : left < right ? -1 : 1;
+    }
+    function publicComment(item) {
+        const { commentId, _mentionSource, _mentionLogin, ...result } = item;
         result.mentionsMe = _mentionSource ? mentioned(_mentionSource, _mentionLogin) : !!result.mentionsMe;
         result.preview = bodySource(_mentionSource);
         return result;
+    }
+    function newest(comments) {
+        let latest = null;
+        for (const item of comments.values())
+            if (!latest || compareComments(item, latest) > 0) latest = item;
+        return latest ? publicComment(latest) : { kind: 'none' };
+    }
+    // Called only after the existing completeness checks, and only on an explicit
+    // history request. Missing/deleted anchors are errors, never guessed predecessors.
+    function historyWindow(comments, before) {
+        const ordered = [...comments.values()].sort((a, b) => compareComments(b, a));
+        const index = ordered.findIndex(item => item.commentUrl === before);
+        if (index < 0) throw fail('HISTORY_ANCHOR');
+        const result = [];
+        let chars = 0;
+        for (const item of ordered.slice(index + 1)) {
+            const value = publicComment(item), size = value.preview?.text.length || 0;
+            if (result.length && (result.length >= 20 || chars + size > 256000)) break;
+            chars += size; result.push(value);
+        }
+        return { kind: 'history', before, comments: result, hasMore: index + 1 + result.length < ordered.length };
     }
     function addComments(edges, info, me, into) {
         for (const edge of edges) {
@@ -245,7 +262,7 @@
                 into.set(candidate.commentId, candidate);
         }
     }
-    function collectLegacyDom(doc, info, me, expected) {
+    function collectLegacyDom(doc, info, me, expected, select = newest) {
         if (expected === null)
             throw fail('PAGE_SHAPE');
         const found = new Map();
@@ -268,7 +285,7 @@
         }
         if (found.size !== expected)
             throw fail('INCOMPLETE');
-        return newest(found);
+        return select(found);
     }
     function findPageConnection(json, info, id) {
         const bound = findSubject([json], info, id);
@@ -287,7 +304,8 @@
         }
         return null;
     }
-    async function parseLastComment(html, info, me, signal, fetchPage) {
+    async function parseLastComment(html, info, me, signal, fetchPage, options = {}) {
+        const select = options.before ? comments => historyWindow(comments, options.before) : newest;
         abortCheck(signal);
         const doc = new DOMParser().parseFromString(html, 'text/html');
         const roots = embeddedRoots(doc);
@@ -310,9 +328,9 @@
                     throw fail('COMMENT_SHAPE');
                 if (expectedComments !== null && comments.size !== expectedComments)
                     throw fail('INCOMPLETE');
-                return newest(comments);
+                return select(comments);
             }
-            return collectLegacyDom(doc, info, me, expectedComments);
+            return collectLegacyDom(doc, info, me, expectedComments, select);
         }
         const comments = new Map(), loaded = new Set();
         const frontEdges = edgesOf(front), backEdges = edgesOf(back);
@@ -343,7 +361,7 @@
             if (pageInfo(front).next !== false && !(total !== null && loaded.size === total))
                 stats.avoidedPagination++;
             log('comments_complete', { item: alias(info), comments: comments.size });
-            return newest(comments);
+            return select(comments);
         }
         let pi = pageInfo(front);
         if (pi.previous === true && !(total !== null && loaded.size === total))
@@ -389,7 +407,7 @@
             if (expectedComments !== null && comments.size === expectedComments) {
                 stats.commentFastPaths++;
                 log('comments_complete', { item: alias(info), pages, comments: comments.size });
-                return newest(comments);
+                return select(comments);
             }
             const nextPi = pageInfo(next);
             if (total !== null && loaded.size > total)
@@ -409,8 +427,8 @@
         if (expectedComments !== null && comments.size !== expectedComments)
             throw fail('INCOMPLETE');
         log('timeline_complete', { item: alias(info), pages, items: loaded.size, comments: comments.size });
-        return newest(comments);
+        return select(comments);
     }
     globalThis.LCParser = Object.freeze({ parseLastComment, parseConversationUrl, safeAvatar, bodySource,
-        commentFromNode, newest, pageInfo, commentCount });
+        commentFromNode, newest, pageInfo, commentCount, historyWindow, compareComments });
 })();
