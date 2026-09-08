@@ -1,4 +1,4 @@
-/* Isolated-world content script. Page/account content never enters extension storage. */
+/* Isolated-world content script. Fetched comment content stays in memory; explicit personal notes use local storage. */
 (async () => {
     'use strict';
     if (globalThis.__lastCommentExtension)
@@ -13,12 +13,14 @@
     let current = '', account = '', bar = null, popup = null, timer = null, scanTimer = null, dirty = new Set(), full = true, paused = false, duplicate = false;
     let timestampTimer = null;
     let previewTimer = null, closingTimer = null, hovered = null, dismissed = null, suppressHover = false, pointer = null;
+    const noteCache = new Map(), noteDrafts = new Map();
+    let noteEpoch = 0, noteHovered = null, noteTimer = null, noteReadPromise = null;
     const technical = { requests: 0, verified: 0, failures: 0, cacheHits: 0, previews: 0, scans: 0 };
     const t = (key, vars) => LC.t(key, prefs.language, vars), own = n => n?.nodeType === 1 && n.closest(`[${OWN}]`);
     const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls)
         n.className = cls; if (text != null)
         n.textContent = text; return n; };
-    function icon(type) { const paths = { comment: 'M3 3h10v8H6l-3 2V3Z', refresh: 'M13 6a5 5 0 1 0 0 4M13 2v4H9', settings: 'M2 4h12M2 8h12M2 12h12M5 2v4M10 6v4M6 10v4', pause: 'M5 3v10M11 3v10', play: 'm5 3 7 5-7 5Z' }; const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); for (const [k, v] of Object.entries({ viewBox: '0 0 16 16', width: '14', height: '14', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }))
+    function icon(type) { const paths = { comment: 'M3 3h10v8H6l-3 2V3Z', refresh: 'M13 6a5 5 0 1 0 0 4M13 2v4H9', settings: 'M2 4h12M2 8h12M2 12h12M5 2v4M10 6v4M6 10v4', pause: 'M5 3v10M11 3v10', play: 'm5 3 7 5-7 5Z', note: 'M3 2h7l3 3v9H3V2Zm7 0v4h3M5 8h6M5 11h4', older: 'm9 3-5 5 5 5', newer: 'm6 3 5 5-5 5', latest: 'm3 3 5 5-5 5M12 3v10', edit: 'm3 10 7-7 3 3-7 7-4 1 1-4Z', trash: 'M2 4h12M6 4V2h4v2M4 4v10h8V4M6 7v4M10 7v4' }; const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); for (const [k, v] of Object.entries({ viewBox: '0 0 16 16', width: '14', height: '14', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }))
         svg.setAttribute(k, v); const p = document.createElementNS(svg.namespaceURI, 'path'); p.setAttribute('d', paths[type] || paths.comment); svg.append(p); return svg; }
     function button(key, action, cls = 'action', glyph) { const b = node('button', cls); b.type = 'button'; b.title = t(key); b.setAttribute('aria-label', t(key)); if (glyph)
         b.append(icon(glyph));
@@ -83,20 +85,49 @@
         parent.style.setProperty('flex-wrap', 'wrap', 'important');
         r.layout = parent;
     } a.insertAdjacentElement('afterend', r.host); }
-    function make(item) { const r = { ...item, host: host(), signature: signature(item.row), state: 'idle', value: null, at: 0, error: null, near: false, inView: false, force: false }; records.set(r.link, r); mount(r); r.host.addEventListener('pointerenter', e => { if (e.pointerType === 'touch')
-        return; hovered = r; clearTimeout(closingTimer); clearTimeout(previewTimer); if (suppressHover || popup?.type === 'settings')
-        return; dismissed = null; previewTimer = setTimeout(() => openPreview(r), 160); }); r.host.addEventListener('pointerleave', () => { if (hovered === r)
-        hovered = null; clearTimeout(previewTimer); scheduleClose(); }); r.host.addEventListener('focusin', e => { if (!e.composedPath().some(n => n?.classList?.contains('reload')))
-        openPreview(r); }); r.host.addEventListener('focusout', scheduleClose); r.host.addEventListener('keydown', e => { if (e.key === 'ArrowDown' && r.value?.kind === 'comment') {
-        e.preventDefault();
-        dismissed = null;
-        suppressHover = false;
-        openPreview(r);
-        popup?.body.focus();
-    } }); near.observe(r.link); inView.observe(r.link); paint(r); return r; }
+    function bindChip(r, chip, main) {
+        // The full-width row and label are deliberately not hover targets.
+        chip.addEventListener('pointerenter', event => {
+            if (event.pointerType === 'touch') return;
+            hovered = r; clearTimeout(closingTimer); clearTimeout(previewTimer);
+            if (suppressHover || ['settings', 'note-edit'].includes(popup?.type)) return;
+            dismissed = null;
+            previewTimer = setTimeout(() => { if (r.chip === chip && chip.matches(':hover')) openPreview(r); }, 160);
+        });
+        chip.addEventListener('pointerleave', () => {
+            if (hovered === r) hovered = null;
+            clearTimeout(previewTimer); scheduleClose();
+        });
+        if (main.tagName !== 'A') return;
+        main.setAttribute('aria-keyshortcuts', 'ArrowDown Space');
+        main.addEventListener('focus', () => openPreview(r));
+        main.addEventListener('blur', scheduleClose);
+        main.addEventListener('keydown', event => {
+            if (event.key === 'ArrowDown' || event.key === ' ') {
+                event.preventDefault(); event.stopPropagation();
+                dismissed = null; suppressHover = false; openPreview(r);
+                if (popup?.type === 'preview') { popup.pinned = true; popup.body.focus(); }
+            }
+        });
+        let touch = false;
+        main.addEventListener('pointerdown', event => { touch = event.pointerType === 'touch'; });
+        main.addEventListener('click', event => {
+            if (touch) {
+                event.preventDefault(); touch = false; dismissed = null; suppressHover = false;
+                openPreview(r); if (popup?.type === 'preview') popup.pinned = true;
+            }
+        });
+    }
+    function make(item) {
+        const r = { ...item, host: host(), signature: signature(item.row), state: 'idle', value: null,
+            at: 0, error: null, near: false, inView: false, force: false, note: LCNotes.empty(), noteLoaded: false };
+        records.set(r.link, r); mount(r);
+        near.observe(r.link); inView.observe(r.link); paint(r); return r;
+    }
     function remove(r) { queue.delete(r); r.job?.subscribers.delete(r); if (r.job && !r.job.subscribers.size)
-        r.job.controller.abort(); near.unobserve(r.link); inView.unobserve(r.link); if (popup?.record === r)
-        closePopup(); r.host.remove(); records.delete(r.link); if (!records.size) { clearTimeout(timestampTimer); timestampTimer = null; } if (r.layout) {
+        r.job.controller.abort(); near.unobserve(r.link); inView.unobserve(r.link); if (popup?.record === r) {
+        keepNoteDraft(); closePopup(false, true);
+    } r.host.remove(); records.delete(r.link); if (!records.size) { clearTimeout(timestampTimer); timestampTimer = null; } if (r.layout) {
         const state = layouts.get(r.layout);
         state?.users.delete(r);
         if (state && !state.users.size) {
@@ -112,7 +143,7 @@
         if (r.timestamp) LCRecency.update(r.timestamp, prefs);
         const data = r.value, stale = !!data && (Date.now() - r.at >= ttl(data) || r.force || !!r.error);
         const type = data?.kind === 'none' ? 'none' : data ? account && data.author.toLowerCase() === account.toLowerCase() ? 'mine' : data.mentionsMe ? 'mention' : data.isBot ? 'bot' : 'other' : r.error ? 'error' : r.state === 'loading' ? 'busy' : 'idle';
-        r.host.hidden = !!data && data.kind === 'none' && !prefs.noComments && !stale;
+        r.host.hidden = !!data && data.kind === 'none' && !prefs.noComments && !stale && !r.note?.text;
         if (r.host.hidden)
             r.host.style.display = 'none';
         else
@@ -163,24 +194,35 @@
         const flag = stale ? t('previous') : ['mine', 'mention', 'bot'].includes(type) ? t(type) : '';
         if (flag)
             chip.append(node('span', 'flag', flag));
-        if (data?.kind === 'comment') {
-            r.peek = button('preview', () => { dismissed = null; suppressHover = false; openPreview(r); }, 'action peek', 'comment');
-            chip.append(r.peek);
-        }
         const reload = button('retry', () => enqueue(r, true), 'action reload', 'refresh');
         reload.disabled = r.state === 'loading' || r.state === 'queued' || !allowed() || Date.now() < transport.limitedUntil;
         chip.append(reload);
-        line.append(label, chip);
-        root.replaceChildren(line);
+        r.noteButton = button('note', () => openNote(r, true), 'action note-button', 'note');
+        r.noteButton.addEventListener('pointerenter', event => {
+            if (event.pointerType === 'touch') return;
+            noteHovered = r; clearTimeout(closingTimer); clearTimeout(noteTimer);
+            if (r.note?.text && !r.note.pinned && !['settings', 'note-edit'].includes(popup?.type))
+                noteTimer = setTimeout(() => openNote(r, false), 180);
+        });
+        r.noteButton.addEventListener('pointerleave', () => { noteHovered = null; clearTimeout(noteTimer); scheduleClose(); });
+        r.noteButton.addEventListener('focus', () => { if (r.note?.text && !r.note.pinned) openNote(r, false); });
+        r.noteButton.addEventListener('blur', scheduleClose);
+        line.append(label, chip, r.noteButton);
+        r.noteInline = button('noteEdit', () => openNote(r, true), 'note-inline');
+        root.replaceChildren(line, r.noteInline);
         r.chip = chip;
         r.primary = main;
+        bindChip(r, chip, main); paintNote(r);
         if (r.timestamp && timestampTimer === null) refreshTimestamps();
         if (active) {
             const focus = [...root.querySelectorAll('button,a')].find(n => n.className === active);
             focus?.focus({ preventScroll: true });
         }
-        if (popup?.record === r)
+        if (popup?.record === r) {
+            if (popup.type === 'preview') popup.anchor = chip;
+            else if (popup.type.startsWith('note')) popup.anchor = r.noteButton;
             updatePreview();
+        }
         updateBar();
     }
     // One lightweight clock per page, independent of request pause/cache settings.
@@ -218,7 +260,7 @@
         paint(r);
         return;
     } r.force ||= force; r.state = 'queued'; r.error = null; queue.add(r); paint(r); queueMicrotask(pump); }
-    function pump() { if (!allowed())
+    function pump() { if (!allowed() || popup?.historyBusy)
         return; for (const r of [...queue])
         if (!r.link.isConnected || (!r.near && !r.force)) {
             queue.delete(r);
@@ -310,7 +352,7 @@
     else
         full = true; clearTimeout(scanTimer); if (document.visibilityState !== 'hidden')
         scanTimer = setTimeout(scan, 80); }
-    function reset() { closePopup(); cancel(); for (const r of [...records.values()])
+    function reset() { keepNoteDraft(); closePopup(false, true); cancel(); for (const r of [...records.values()])
         remove(r); clearTimeout(timestampTimer); timestampTimer = null; cache.clear(); bar?.remove(); bar = null; current = identity(); account = login(); dirty.clear(); full = true; }
     function scan() {
         scanTimer = null;
@@ -351,6 +393,7 @@
                 enqueue(r);
         }
         ensureBar();
+        void loadNotes();
         refreshTimestamps();
         if (!timer)
             timer = setTimeout(maintain, 30000);
@@ -393,9 +436,9 @@
         return; const text = !prefs.enabled ? t('paused') : navigator.onLine === false ? t('offline') : paused ? t('paused') : Date.now() < transport.limitedUntil ? t('limited') : t('ready', { done: [...records.values()].filter(r => r.value).length, total: records.size }); if (s.textContent !== text)
         s.textContent = text; }
     function showPopup(type, anchor, title) {
-        closePopup();
+        if (closePopup() === false) return null;
         const h = host();
-        h.style.cssText = `position:fixed;inset:auto;margin:0;padding:0;border:0;background:transparent;z-index:2147483647;width:${type === 'settings' ? 320 : 540}px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:visible;`;
+        h.style.cssText = `position:fixed;inset:auto;margin:0;padding:0;border:0;background:transparent;z-index:2147483647;width:${type === 'settings' ? 320 : type === 'note-edit' ? 400 : type === 'note' ? 360 : 540}px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:visible;`;
         h.setAttribute('popover', 'manual');
         const panel = node('section', 'panel');
         panel.setAttribute('role', 'region');
@@ -438,6 +481,7 @@
             image.replaceWith(node('span', null, t('imageLink') + ': ' + image.alt));
             position();
         } }, { capture: true, signal });
+        h.shadowRoot.addEventListener('click', event => event.stopPropagation());
         return popup;
     }
     function position() {
@@ -454,7 +498,7 @@
             closePopup();
             return;
         }
-        h.style.width = Math.max(120, Math.min(p.type === 'settings' ? 320 : 540, w - 24)) + 'px';
+        h.style.width = Math.max(120, Math.min(p.type === 'settings' ? 320 : p.type === 'note-edit' ? 400 : p.type === 'note' ? 360 : 540, w - 24)) + 'px';
         const below = top + ht - a.bottom - 20, above = a.top - top - 20;
         const ideal = p.type === 'settings' ? 520 : 480;
         const down = below >= Math.min(ideal, 260) || below >= above;
@@ -466,47 +510,291 @@
         h.style.left = x + 'px';
         h.style.top = y + 'px';
     }
-    function closePopup(restore = false) { clearTimeout(previewTimer); clearTimeout(closingTimer); const p = popup; popup = null; if (!p)
-        return; p.controller.abort(); try {
-        p.host.hidePopover();
+    function keepNoteDraft() {
+        const p = popup;
+        if (p?.type === 'note-edit' && p.noteDirty) {
+            noteDrafts.set(p.noteKey, { text: p.editor.value, pinned: p.pin.checked, revision: p.noteRevision });
+            if (noteDrafts.size > 20) noteDrafts.delete(noteDrafts.keys().next().value);
+        }
     }
-    catch { } p.host.remove(); p.record?.primary?.setAttribute('aria-expanded', 'false'); if (restore) {
-        hovered = null;
-        dismissed = p.record;
-        suppressHover = true;
-        const target = p.type === 'preview' ? p.record?.peek : p.anchor;
-        target?.focus({ preventScroll: true });
-    } }
-    function scheduleClose() { clearTimeout(closingTimer); if (popup?.type !== 'preview')
-        return; closingTimer = setTimeout(() => { if (!popup || popup.host.matches(':hover') || popup.host.shadowRoot.activeElement || hovered === popup.record || popup.record?.host.shadowRoot.activeElement)
-        return; closePopup(); }, 260); }
-    function openPreview(r) { clearTimeout(previewTimer); clearTimeout(closingTimer); if (r.value?.kind !== 'comment' || !r.host.isConnected || popup?.type === 'settings' || dismissed === r)
-        return; if (popup?.record === r) {
-        position();
-        return;
-    } const p = showPopup('preview', r.host, t('preview')); p.record = r; r.primary?.setAttribute('aria-expanded', 'true'); technical.previews++; metric('previews'); updatePreview(); }
+    function closePopup(restore = false, force = false) {
+        const p = popup;
+        if (p?.type === 'note-edit' && !force) {
+            if (p.noteSaving) return false;
+            if (p.noteDirty && !confirm(t('noteDiscard'))) return false;
+            noteDrafts.delete(p.noteKey);
+        }
+        clearTimeout(previewTimer); clearTimeout(closingTimer); clearTimeout(noteTimer);
+        popup = null; if (!p) return true;
+        p.controller.abort();
+        try { p.host.hidePopover(); } catch {}
+        p.host.remove(); p.record?.primary?.setAttribute('aria-expanded', 'false');
+        if (restore) {
+            hovered = null; noteHovered = null; dismissed = p.record; suppressHover = true;
+            const target = p.type === 'preview' ? p.record?.primary : p.type.startsWith('note') ? p.record?.noteButton : p.anchor;
+            target?.focus({ preventScroll: true });
+        }
+        queueMicrotask(pump); return true;
+    }
+    function scheduleClose() {
+        clearTimeout(closingTimer);
+        if (!['preview', 'note'].includes(popup?.type) || popup.pinned) return;
+        closingTimer = setTimeout(() => {
+            const p = popup;
+            if (!p || p.pinned || p.host.matches(':hover') || p.host.shadowRoot.activeElement) return;
+            const anchorHovered = p.type === 'preview' ? hovered === p.record : noteHovered === p.record;
+            const focus = p.record?.host.shadowRoot.activeElement;
+            if (anchorHovered || (p.type === 'preview' ? focus === p.record?.primary : focus === p.record?.noteButton)) return;
+            closePopup();
+        }, 260);
+    }
+    function openPreview(r) {
+        clearTimeout(previewTimer); clearTimeout(closingTimer);
+        if (r.value?.kind !== 'comment' || !r.chip?.isConnected || current !== identity() ||
+            ['settings', 'note-edit'].includes(popup?.type) || dismissed === r) return;
+        if (popup?.type === 'preview' && popup.record === r) { position(); return; }
+        const p = showPopup('preview', r.chip, t('preview')); if (!p) return;
+        p.record = r; p.history = [r.value]; p.index = 0; p.buffer = []; p.hasMore = true;
+        p.historyBusy = false; p.historyError = ''; p.pinned = false; p.initialUrl = r.value.commentUrl;
+        r.primary?.setAttribute('aria-expanded', 'true'); technical.previews++; metric('previews'); updatePreview();
+    }
     const rendered = new WeakMap();
-    function updatePreview() { const p = popup, r = p?.record; if (!r || p.type !== 'preview')
-        return; const value = r.value; p.heading.textContent = '@' + (value.author || t('unknown')) + ' · ' + LC.date(value.time, prefs, true); const source = value.preview; if (p.source !== source || p.language !== prefs.language) {
-        p.source = source;
-        p.language = prefs.language;
-        if (source) {
-            let saved = rendered.get(source), result = saved?.language === prefs.language ? saved.result : null;
-            if (!result) {
-                result = LCRender.render(source, value.commentUrl, prefs.language);
-                rendered.set(source, { language: prefs.language, result });
+    function authorTone(author) {
+        let hash = 0;
+        for (const c of (author || '?').toLowerCase()) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+        return hash % 6;
+    }
+    function historyTrail(p) {
+        const trail = node('nav', 'history-trail'); trail.setAttribute('aria-label', t('historyTrail'));
+        const groups = [];
+        for (let i = p.history.length - 1; i >= 0; i--) {
+            const value = p.history[i], last = groups.at(-1);
+            if (value.author && last?.author.toLowerCase() === value.author.toLowerCase()) {
+                last.count++; last.indices.push(i);
+            } else groups.push({ author: value.author, count: 1, indices: [i] });
+        }
+        for (const group of groups) {
+            if (trail.childNodes.length) { const arrow = node('span', 'trail-arrow', '→'); arrow.setAttribute('aria-hidden', 'true'); trail.append(arrow); }
+            const b = node('button', 'trail-person', (group.author ? '@' + group.author : t('unknown')) + (group.count > 1 ? ` ×${group.count}` : ''));
+            b.type = 'button'; b.dataset.tone = String(authorTone(group.author));
+            b.setAttribute('aria-current', group.indices.includes(p.index) ? 'true' : 'false');
+            b.addEventListener('click', () => { if (p.historyBusy) return; p.index = group.indices.at(-1); p.pinned = true; updatePreview(); });
+            trail.append(b);
+        }
+        return trail;
+    }
+    async function previousComment(p) {
+        if (popup !== p || p.historyBusy) return;
+        p.pinned = true; p.historyError = '';
+        if (p.index + 1 < p.history.length) { p.index++; updatePreview(); return; }
+        if (!p.buffer.length && p.hasMore) {
+            if (!allowed()) { p.historyError = t('historyPaused'); updatePreview(); return; }
+            const before = p.history[p.index].commentUrl;
+            p.historyBusy = true; updatePreview();
+            try {
+                const result = await transport.issue(p.record.info, account, p.controller.signal, { before });
+                if (popup !== p || p.controller.signal.aborted || current !== identity()) return;
+                if (result?.kind !== 'history' || result.before !== before || !Array.isArray(result.comments)) throw new Error('history shape');
+                p.buffer = result.comments; p.hasMore = result.hasMore;
+            } catch (error) {
+                if (popup !== p || p.controller.signal.aborted) return;
+                p.historyError = error.code === 'HISTORY_ANCHOR' ? t('error_HISTORY_ANCHOR') : t('historyError');
+            } finally {
+                p.historyBusy = false; if (popup === p) updatePreview(); pump();
             }
-            p.body.replaceChildren(result.fragment.cloneNode(true));
-            p.body.classList.toggle('markdown', result.rich);
-            p.truncated = result.truncated;
-            p.rich = result.rich;
         }
-        else {
-            p.body.textContent = t('noBody');
-            p.body.classList.remove('markdown');
+        if (popup !== p) return;
+        if (p.buffer.length) {
+            p.history.push(p.buffer.shift()); p.index++;
+            // A single preview owns a bounded sliding history, never persistent data.
+            let chars = p.history.reduce((n, value) => n + (value.preview?.text.length || 0), 0);
+            while (p.index > 0 && (p.history.length > 50 || chars > 512000)) {
+                chars -= p.history[0].preview?.text.length || 0; p.history.shift(); p.index--;
+            }
         }
-        p.body.scrollTop = 0;
-    } p.foot.replaceChildren(node('span', null, (r.error || r.force || Date.now() - r.at >= ttl(value) ? t('previous') + ' · ' : '') + (p.truncated ? t('truncated') + ' · ' : '') + t(p.rich ? 'markdown' : 'plain'))); const link = node('a', null, t('openComment') + ' ↗'); link.href = value.commentUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; p.foot.append(link); position(); }
+        updatePreview();
+    }
+    function updatePreview() {
+        const p = popup;
+        if (!p || p.type !== 'preview' || !p.record) return;
+        const value = p.history[p.index], source = value.preview;
+        const headingKey = JSON.stringify([value.commentUrl, value.author, value.time, prefs.language, prefs.timeZone, value.isBot]);
+        if (p.headingKey !== headingKey) {
+            p.headingKey = headingKey;
+            const identityRow = node('div', 'comment-identity');
+            const disc = node('span', 'author-disc', (value.author?.[0] || '?').toUpperCase());
+            disc.dataset.tone = String(authorTone(value.author)); disc.setAttribute('aria-hidden', 'true');
+            const author = node('strong', 'comment-author', value.author ? '@' + value.author : t('unknown'));
+            const time = node('span', 'history-time', LC.date(value.time, prefs)); time.title = LC.date(value.time, prefs, true);
+            identityRow.append(disc, author, time);
+            if (value.isBot) identityRow.append(node('span', 'flag', t('bot')));
+            p.heading.replaceChildren(identityRow);
+        }
+        const trailKey = JSON.stringify([p.history.map(v => v.commentUrl), p.index, prefs.language]);
+        if (p.trailKey !== trailKey) {
+            p.trailKey = trailKey; p.trail?.remove();
+            if (p.history.length > 1) {
+                p.trail = historyTrail(p); p.heading.parentElement.after(p.trail);
+                p.trail.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+        }
+        if (p.source !== source || p.language !== prefs.language) {
+            p.source = source; p.language = prefs.language;
+            if (source) {
+                let saved = rendered.get(source), result = saved?.language === prefs.language ? saved.result : null;
+                if (!result) { result = LCRender.render(source, value.commentUrl, prefs.language); rendered.set(source, { language: prefs.language, result }); }
+                p.body.replaceChildren(result.fragment.cloneNode(true)); p.body.classList.toggle('markdown', result.rich);
+                p.truncated = result.truncated;
+            } else { p.body.textContent = t('noBody'); p.body.classList.remove('markdown'); p.truncated = false; }
+            p.body.scrollTop = 0;
+        }
+        const atStart = !p.hasMore && !p.buffer.length && p.index === p.history.length - 1;
+        if (!p.historyControls) {
+            const controls = node('nav', 'history-controls');
+            const older = button('older', () => previousComment(p), 'history-older');
+            const newer = button('newer', () => { if (p.historyBusy || p.index === 0) return; p.index--; p.pinned = true; p.historyError = ''; updatePreview(); }, 'action history-next', 'newer');
+            const latest = button('latest', () => {
+                if (p.historyBusy) return;
+                p.history = [p.record.value]; p.index = 0; p.buffer = []; p.hasMore = true;
+                p.pinned = true; p.historyError = ''; updatePreview();
+            }, 'action history-latest', 'latest');
+            const open = node('a', 'history-open'); open.target = '_blank'; open.rel = 'noopener noreferrer';
+            const status = node('span', 'history-notice'); status.setAttribute('role', 'status'); status.hidden = true;
+            controls.append(older, newer, latest); p.foot.replaceChildren(controls, open, status);
+            p.historyControls = { older, newer, latest, open, status };
+        }
+        const { older, newer, latest, open, status } = p.historyControls;
+        const olderLabel = t(p.historyBusy ? 'historyLoading' : atStart ? 'firstComment' : 'older');
+        if (older.textContent !== olderLabel) older.textContent = olderLabel;
+        older.title = olderLabel; older.setAttribute('aria-label', olderLabel);
+        older.disabled = atStart; older.setAttribute('aria-disabled', String(p.historyBusy || atStart));
+        newer.disabled = p.historyBusy || p.index === 0;
+        latest.disabled = p.historyBusy || (p.history.length === 1 && value.commentUrl === p.record.value.commentUrl);
+        for (const [control, label] of [[newer, 'newer'], [latest, 'latest']]) { control.title = t(label); control.setAttribute('aria-label', t(label)); }
+        open.textContent = t('openComment') + ' ↗'; open.href = value.commentUrl;
+        status.hidden = !p.historyError && !p.truncated;
+        status.className = p.historyError ? 'history-error' : 'history-notice';
+        status.textContent = p.historyError || (p.truncated ? t('truncated') : '');
+        position();
+    }
+
+    function loadNotes() {
+        if (noteReadPromise) return noteReadPromise;
+        const batch = [...records.values()].filter(r => !r.noteLoaded && !r.noteLoading);
+        if (!batch.length) return Promise.resolve();
+        for (const r of batch) r.noteLoading = true;
+        const epoch = noteEpoch;
+        noteReadPromise = (async () => {
+            let changedDuringRead = false;
+            try {
+                await Promise.all(batch.map(async r => { r.noteKey ||= await LCNotes.keyFor(r.info); }));
+                const missing = [...new Set(batch.map(r => r.noteKey))].filter(key => !noteCache.has(key));
+                const data = missing.length ? await chrome.storage.local.get(missing) : {};
+                for (const r of batch) {
+                    if (records.get(r.link) !== r) continue;
+                    if (noteEpoch !== epoch && !noteCache.has(r.noteKey)) { changedDuringRead = true; continue; }
+                    const value = noteCache.get(r.noteKey) || LCNotes.normalize(data[r.noteKey]);
+                    noteCache.set(r.noteKey, value); r.note = value; r.noteLoaded = true; r.noteReadError = false; paintNote(r);
+                }
+                while (noteCache.size > 250) noteCache.delete(noteCache.keys().next().value);
+            } catch {
+                for (const r of batch) { r.noteReadError = true; paintNote(r); }
+            } finally {
+                for (const r of batch) r.noteLoading = false;
+                noteReadPromise = null;
+                // New rows or a concurrent storage change must not miss pinned notes.
+                if (changedDuringRead || [...records.values()].some(r => !batch.includes(r) && !r.noteLoaded && !r.noteReadError))
+                    queueMicrotask(loadNotes);
+            }
+        })();
+        return noteReadPromise;
+    }
+    function paintNote(r) {
+        if (!r.noteButton) return;
+        r.noteButton.classList.toggle('has-note', !!r.note.text);
+        r.noteButton.title = r.noteReadError ? t('noteLoadError') : noteDrafts.has(r.noteKey) ? t('noteDraft') : t('note');
+        r.noteButton.setAttribute('aria-label', r.noteButton.title);
+        r.noteInline.hidden = !r.note.text || !r.note.pinned;
+        r.noteInline.textContent = r.note.text;
+        if (r.note.text) { r.host.hidden = false; r.host.style.display = 'block'; }
+        if (popup?.type === 'note' && popup.record === r) {
+            if (!r.note.text) closePopup(); else { popup.body.textContent = r.note.text; position(); }
+        }
+    }
+    async function openNote(r, edit) {
+        if (current !== identity() || records.get(r.link) !== r) return;
+        clearTimeout(previewTimer); clearTimeout(closingTimer); clearTimeout(noteTimer);
+        if (!r.noteLoaded) {
+            await loadNotes();
+            if (!r.noteLoaded && !r.noteReadError) await loadNotes();
+            if (!r.noteLoaded || records.get(r.link) !== r) return;
+        }
+        if (!edit && (!r.note.text || r.note.pinned || ['settings', 'note-edit'].includes(popup?.type) || suppressHover)) return;
+        if (popup?.record === r && popup.type === (edit ? 'note-edit' : 'note')) return;
+        const p = showPopup(edit ? 'note-edit' : 'note', r.noteButton, t('note')); if (!p) return;
+        p.record = r; p.noteKey = r.noteKey; p.noteRevision = r.note.revision;
+        p.pinned = edit; p.noteDirty = false; p.noteSaving = false;
+        if (!edit) {
+            p.body.textContent = r.note.text; p.body.classList.add('note-body');
+            p.foot.append(node('span', null, t('noteLocal')), button('noteEdit', () => openNote(r, true), 'note-edit-button'));
+            position(); return;
+        }
+        const draft = noteDrafts.get(r.noteKey), value = draft || r.note;
+        if (draft) { p.noteRevision = draft.revision; p.noteDirty = true; }
+        const editor = node('textarea', 'note-editor'); editor.maxLength = LCNotes.MAX_CHARS;
+        editor.rows = 7; editor.value = value.text; editor.placeholder = t('notePlaceholder'); editor.setAttribute('aria-label', t('note'));
+        editor.spellcheck = false;
+        const pinLabel = node('label', 'note-pin'), pin = node('input'); pin.type = 'checkbox'; pin.checked = value.pinned;
+        pinLabel.append(pin, node('span', null, t('notePinned')));
+        const status = node('span', 'note-status', draft ? t('noteDraft') : t('noteLocal')); status.setAttribute('role', 'status');
+        const save = button('noteSave', () => saveNote(p), 'note-save'); save.disabled = !p.noteDirty;
+        p.editor = editor; p.pin = pin; p.noteStatus = status; p.saveButton = save;
+        p.body.replaceChildren(editor);
+        const left = node('div', 'note-controls'); left.append(pinLabel, status); p.foot.append(left, save);
+        const markDirty = () => { p.noteDirty = editor.value !== r.note.text || pin.checked !== r.note.pinned; save.disabled = !p.noteDirty; };
+        editor.addEventListener('input', markDirty); pin.addEventListener('change', markDirty);
+        editor.addEventListener('keydown', event => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); void saveNote(p); }
+        });
+        window.addEventListener('beforeunload', event => {
+            if (p.noteDirty) { event.preventDefault(); event.returnValue = ''; }
+        }, { signal: p.controller.signal });
+        if (r.note.text) {
+            const del = button('noteDelete', () => {
+                if (!confirm(t('noteDeleteConfirm'))) return;
+                editor.value = ''; pin.checked = false; p.noteDirty = true; void saveNote(p);
+            }, 'action note-delete', 'trash');
+            p.heading.after(del);
+        }
+        position(); editor.focus({ preventScroll: true });
+    }
+    async function saveNote(p) {
+        if (p.noteSaving || !p.noteDirty) return false;
+        p.noteSaving = true; p.saveButton.disabled = true; p.editor.disabled = p.pin.disabled = true;
+        p.noteStatus.textContent = t('noteSaving');
+        try {
+            const response = await chrome.runtime.sendMessage({ type: 'LC_NOTE_WRITE', key: p.noteKey,
+                expectedRevision: p.noteRevision, value: { text: p.editor.value, pinned: p.pin.checked } });
+            if (!response?.ok) {
+                if (response?.error === 'NOTE_CONFLICT') {
+                    // Updating the revision does not write anything: overwriting needs a second explicit click.
+                    p.noteRevision = response.value.revision; p.noteStatus.textContent = t('noteConflict');
+                    p.saveButton.textContent = t('noteOverwrite');
+                } else p.noteStatus.textContent = t('saveFailed');
+                return false;
+            }
+            p.noteDirty = false; noteDrafts.delete(p.noteKey); noteCache.set(p.noteKey, response.value);
+            for (const r of records.values()) if (r.noteKey === p.noteKey) {
+                r.note = response.value; r.noteLoaded = true; paintNote(r);
+            }
+            if (popup === p) closePopup(true, true);
+            return true;
+        } catch { p.noteStatus.textContent = t('saveFailed'); return false; }
+        finally {
+            p.noteSaving = false; p.editor.disabled = p.pin.disabled = false; p.saveButton.disabled = !p.noteDirty;
+        }
+    }
+
     function preferenceField(key, label, type, values) { const wrapper = node('label', 'field'), text = node('span', null, t(label)); const control = node(type === 'checkbox' ? 'input' : 'select'); if (type === 'checkbox') {
         control.type = 'checkbox';
         control.checked = prefs[key];
@@ -530,7 +818,7 @@
     function openSettings(anchor) { if (popup?.type === 'settings') {
         closePopup();
         return;
-    } showPopup('settings', anchor, t('settingsTitle')); settingsBody(); }
+    } if (showPopup('settings', anchor, t('settingsTitle'))) settingsBody(); }
     function diagnostics() { return { schemaVersion: 1, version: chrome.runtime.getManifest().version, counts: { ...technical, requests: transport.counts.requests, pages: transport.counts.pages }, openRecords: records.size, activeJobs: jobs.size, queuedJobs: queue.size, language: prefs.language }; }
     chrome.runtime.onMessage.addListener((message, sender, reply) => { if (sender.id !== chrome.runtime.id)
         return; if (message?.type === 'LC_STATUS') {
@@ -547,8 +835,14 @@
         schedule();
         reply({ ok: true });
     } });
-    chrome.storage.onChanged.addListener((changes, area) => { if (area !== 'local' || !changes.preferences)
-        return; const old = prefs; prefs = LC.normalize(changes.preferences.newValue); if (!prefs.enabled) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local') return;
+        for (const [key, change] of Object.entries(changes)) if (LCNotes.validKey(key)) {
+            noteEpoch++; const value = LCNotes.normalize(change.newValue); noteCache.set(key, value);
+            if (noteCache.size > 250) noteCache.delete(noteCache.keys().next().value);
+            for (const r of records.values()) if (r.noteKey === key) { r.note = value; r.noteLoaded = true; paintNote(r); }
+        }
+        if (!changes.preferences) return; const old = prefs; prefs = LC.normalize(changes.preferences.newValue); if (!prefs.enabled) {
         reset();
         clearTimeout(timer);
         timer = null;
@@ -618,7 +912,7 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden) {
         clearTimeout(timestampTimer);
         timestampTimer = null;
-        closePopup();
+        if (popup?.type !== 'note-edit') closePopup();
         cancel();
         clearTimeout(timer);
         timer = null;
@@ -628,7 +922,7 @@
         schedule();
         pump();
     } });
-    window.addEventListener('offline', () => { cancel(); updateBar(); });
+    window.addEventListener('offline', () => { if (popup?.type === 'preview') closePopup(); cancel(); updateBar(); });
     window.addEventListener('online', () => { for (const r of records.values())
         if (r.near)
             enqueue(r); });
