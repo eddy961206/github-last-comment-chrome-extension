@@ -1,8 +1,7 @@
 /* Package runtime files into dist/last-comment-extension-<version>.zip. No dev-only files. */
-/* Uses tar (Windows bsdtar / GNU tar) so directory structure is preserved
-   on every platform, including the ubuntu release runner. */
-import { readFileSync, mkdirSync, existsSync, rmSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+/* Real ZIP output on Windows and Linux, without external archivers. */
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { zipStore } from './zip.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +20,7 @@ const runtimeFiles = [
   'help.html',
   'privacy.html',
   'src/shared.js',
+  'src/notes.js',
   'src/styles.js',
   'src/recency.js',
   'src/parser.js',
@@ -35,6 +35,7 @@ const runtimeFiles = [
   'icons/icon-32.png',
   'icons/icon-48.png',
   'icons/icon-128.png',
+  'icons/mark.svg',
   '_locales/en/messages.json',
   '_locales/ko/messages.json'
 ];
@@ -47,10 +48,9 @@ for (const file of runtimeFiles) {
 }
 
 try {
-  if (existsSync(out)) rmSync(out);
-  execFileSync('tar', ['-a', '-c', '-f', out, ...runtimeFiles], { cwd: root, stdio: 'inherit' });
+  writeFileSync(out, zipStore(runtimeFiles.map(name => ({ name, data: readFileSync(path.join(root, name)) }))));
   console.log(`package: ${out}`);
 } catch (error) {
-  console.error(`package: failed (tar required): ${error.message}`);
+  console.error(`package: failed: ${error.message}`);
   process.exit(1);
 }
