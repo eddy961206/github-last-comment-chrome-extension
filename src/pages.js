@@ -115,9 +115,9 @@
         void refreshCounters();
         return w;
     }
-    function legal() { const w = el('main', 'wrap prose'); w.append(el('h1', null, t('privacyTitle')), el('p', 'small', t('privacyEffective'))); for (const [heading, body] of [['scopeTitle', 'privacyData'], ['dataTitle', 'privacyRetention'], ['connections', 'privacyNetwork'], ['support', 'privacySharing'], ['localOnly', 'privacyUse'], ['source', 'privacyContact']])
+    function legal() { const w = el('main', 'wrap prose'); w.append(el('h1', null, t('privacyTitle')), el('p', 'small', t('privacyEffective'))); for (const [heading, body] of [['scopeTitle', 'privacyData'], ['dataTitle', 'privacyRetention'], ['note', 'notesPrivacy'], ['connections', 'privacyNetwork'], ['support', 'privacySharing'], ['localOnly', 'privacyUse'], ['source', 'privacyContact']])
         w.append(el('h2', null, t(heading)), el('p', null, t(body))); w.append(a(t('support'), LC.repo + '/issues')); return w; }
-    function help() { const w = el('main', 'wrap prose'); w.append(el('h1', null, t('help')), el('p', null, t('welcomeNote')), el('h2', null, t('keyboard')), el('p', null, t('keyboardHelp')), el('h2', null, t('limitsTitle')), el('p', null, t('limitsBody')), el('h2', null, t('faqTitle'))); for (const [q, ans] of [['faqPrivate', 'faqPrivateAnswer'], ['faqMissing', 'faqMissingAnswer'], ['faqSlow', 'faqSlowAnswer'], ['faqMetrics', 'faqMetricsAnswer']]) {
+    function help() { const w = el('main', 'wrap prose'); w.append(el('h1', null, t('help')), el('p', null, t('welcomeNote')), el('h2', null, t('keyboard')), el('p', null, t('keyboardHelp')), el('h2', null, t('note')), el('p', null, t('notesHelp')), el('h2', null, t('limitsTitle')), el('p', null, t('limitsBody')), el('h2', null, t('faqTitle'))); for (const [q, ans] of [['faqPrivate', 'faqPrivateAnswer'], ['faqMissing', 'faqMissingAnswer'], ['faqSlow', 'faqSlowAnswer'], ['faqMetrics', 'faqMetricsAnswer']]) {
         const d = el('details');
         d.append(el('summary', null, t(q)), el('p', null, t(ans)));
         w.append(d);

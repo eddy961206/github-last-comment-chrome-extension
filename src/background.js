@@ -1,5 +1,5 @@
 /* MV3 worker. Settings and optional local counters; deliberately no fetch(). */
-importScripts('shared.js');
+importScripts('shared.js', 'notes.js');
 const METRICS = new Set(['lists', 'previews', 'lookups', 'failures', 'cache']);
 let pending = Promise.resolve();
 function trusted(sender) {
@@ -27,6 +27,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (!trusted(sender) || !message || typeof message !== 'object')
         return;
+    if (message.type === 'LC_NOTE_WRITE') {
+        pending = pending.then(() => LCNotes.write(chrome.storage.local, message))
+            .then(reply).catch(() => reply({ ok: false, error: 'NOTE_SAVE' }));
+        return true;
+    }
     if (message.type === 'LC_METRIC' && METRICS.has(message.metric)) {
         pending = pending.then(async () => {
             const data = await chrome.storage.local.get(['preferences', 'counters']);

@@ -17,6 +17,7 @@ const esc = (s) => String(s)
 const sections = [
   ['scopeTitle', 'privacyData'],
   ['dataTitle', 'privacyRetention'],
+  ['note', 'notesPrivacy'],
   ['connections', 'privacyNetwork'],
   ['support', 'privacySharing'],
   ['localOnly', 'privacyUse'],
@@ -46,10 +47,8 @@ const appInner = [
 
 const p = path.join(here, '..', 'privacy.html');
 let html = readFileSync(p, 'utf8');
-if (!html.includes('<div id="app"></div>')) {
-  console.error('privacy.html already contains static content; refusing to double-generate.');
-  process.exit(1);
-}
+html = html.replace(/<!-- Static fallback:[\s\S]*?<div id="app">[\s\S]*?\n  <\/div>/, '<div id="app"></div>');
+if (!html.includes('<div id="app"></div>')) throw new Error('Static app container not found');
 html = html.replace(/<div id="app"><\/div>/, `<!-- Static fallback: shown when JS is unavailable (reviewers, crawlers). Rendered dynamically when JS runs. Regenerate with: node tools/build-privacy-fallback.mjs -->\n  <div id="app">\n${appInner}\n  </div>`);
 html = html.replace(
   '<noscript>JavaScript is required to display extension settings.</noscript>',

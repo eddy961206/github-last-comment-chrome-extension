@@ -7,7 +7,7 @@ A standalone Manifest V3 Chrome extension that shows the latest ordinary GitHub 
 ## Highlights
 
 - Latest comment author, timestamp, avatar, and sanitized Markdown preview beneath supported titles
-- Hover, keyboard, and button preview with light and dark theme support
+- Badge-only hover, keyboard, and touch preview with light and dark theme support
 - Shadow DOM badges that avoid page style conflicts
 - Language control (English default, Korean available), time-zone control, avatars, zero-comment display, and result reuse
 - Pause, per-item retry, and viewport-aware fetching with bounded pagination verification
@@ -29,7 +29,7 @@ A standalone Manifest V3 Chrome extension that shows the latest ordinary GitHub 
 
 1. Open a GitHub issue or pull request list while signed in.
 2. Read the compact “Last comment” line under each title.
-3. Hover, focus with Tab, or select the preview button to read the formatted comment.
+3. Hover over a badge or focus the author link with Tab to read the formatted comment.
 4. Use the toolbar to refresh visible items, pause, or open Settings.
 5. In Settings, change language, time zone, avatars, cache duration, and optional local counters.
 
@@ -44,7 +44,7 @@ See `docs/PRIVACY.md`, `privacy.html`, and `store/listing/privacy-disclosure.md`
 ## Repository layout
 
 - `manifest.json` — Manifest V3 metadata, English default locale, `storage` permission only, GitHub-only content script
-- `src/` — `shared.js`, `styles.js`, `parser.js`, `render.js`, `transport.js`, `content.js`, `background.js`, `pages.js`
+- `src/` — `shared.js`, `notes.js`, `styles.js`, `recency.js`, `parser.js`, `render.js`, `transport.js`, `content.js`, `background.js`, `pages.js`
 - `styles/` — Shadow DOM list styles and extension page styles
 - `welcome.html`, `popup.html`, `options.html`, `help.html`, `privacy.html` — extension pages rendered by `src/pages.js`
 - `_locales/en`, `_locales/ko` — store and extension metadata locales
@@ -85,3 +85,27 @@ Screenshots in `store/assets` use English guidance and synthetic `octo-demo/atla
 - Security: see `docs/SECURITY.md`
 - License: MIT, see `LICENSE`
 - Independent extension. Not affiliated with or endorsed by GitHub or Google.
+
+## v1.1.0: history and personal notes
+
+Hover over the last-comment **badge**, not the surrounding row. The redundant
+speech-bubble button is removed; keyboard users can focus the author link and
+press Arrow Down or Space. Touching the author opens the preview.
+
+Select **Previous comment** to inspect one earlier general comment at a time.
+Next and Latest return through the same conversation. The author trail groups
+consecutive replies by the same person. History is verified on demand, with a
+bounded reusable batch; GitHub may require multiple timeline requests for that
+first batch. It is not an unread-status or reply-needed indicator.
+
+The note button saves a personal note (up to 4,000 characters) for that issue in
+this Chrome profile. **Always show** pins it below the badge; otherwise hover over
+the note button. Save is explicit. Revision conflicts require confirmation before
+an older draft replaces another tab's edit. Notes are not posted to GitHub, synced,
+or included in diagnostic/counter exports. Uninstalling removes extension storage.
+This is not an encrypted secrets vault.
+
+Build and verify: `npm run package && npm run validate`. The package is generated
+without external archivers. The repository includes notes/history regression
+checks in addition to timestamp-boundary tests. Browser fixture testing is distinct
+from testing an installed extension against an authenticated GitHub session.

@@ -3,6 +3,7 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { zipEntries } from '../tools/zip.mjs';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
@@ -20,6 +21,7 @@ try {
   process.exit(1);
 }
 
+if (JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version !== manifest.version) fail('package and manifest versions must match');
 if (manifest.manifest_version !== 3) fail('manifest_version must be 3');
 if (manifest.default_locale !== 'en') fail('default_locale must be en');
 if (JSON.stringify(manifest.permissions) !== JSON.stringify(['storage'])) {
@@ -27,7 +29,7 @@ if (JSON.stringify(manifest.permissions) !== JSON.stringify(['storage'])) {
 }
 
 const contentScripts = manifest.content_scripts?.[0];
-const expectedJs = ['src/shared.js', 'src/styles.js', 'src/recency.js', 'src/parser.js', 'src/render.js', 'src/transport.js', 'src/content.js'];
+const expectedJs = ['src/shared.js', 'src/notes.js', 'src/styles.js', 'src/recency.js', 'src/parser.js', 'src/render.js', 'src/transport.js', 'src/content.js'];
 if (!contentScripts || JSON.stringify(contentScripts.js) !== JSON.stringify(expectedJs)) {
   fail(`content_scripts.js must be ${expectedJs.join(', ')}`);
 }
@@ -70,7 +72,7 @@ for (const locale of ['en', 'ko']) {
   }
 }
 
-const jsFiles = [...expectedJs, 'src/background.js', 'src/pages.js', 'tools/package.mjs', 'tests/validate.mjs'];
+const jsFiles = [...expectedJs, 'src/background.js', 'src/pages.js', 'tools/package.mjs', 'tests/validate.mjs', 'tests/features.test.mjs', 'tools/zip.mjs'];
 for (const file of jsFiles) {
   try {
     execFileSync(process.execPath, ['--check', path.join(root, file)], { stdio: 'pipe' });
@@ -115,7 +117,7 @@ const zipPath = path.join(root, 'dist', `last-comment-extension-${manifest.versi
 if (existsSync(zipPath)) {
   let entries = [];
   try {
-    entries = execFileSync('tar', ['-tf', zipPath], { encoding: 'utf8' }).split('\n').map((s) => s.trim()).filter(Boolean);
+    entries = zipEntries(readFileSync(zipPath));
   } catch (error) {
     fail(`cannot list submission zip: ${error.message}`);
   }
