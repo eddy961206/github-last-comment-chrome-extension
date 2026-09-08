@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0 — 2026-09-08
+
+- Limit comment-preview hover to the badge, not the label or unused row width
+- Remove the redundant preview icon; keep keyboard and touch access
+- Add previous/next/latest comment navigation with author groups and verified, bounded history batches
+- Add explicit-save, device-local issue notes with pinned/hover-only display, draft preservation and revision conflict checks
+- Preserve date/time recency colors, compact layout, EN/KO copy, and existing permissions
+- Update privacy disclosures for user-authored notes; no note content is included in telemetry or diagnostic exports
+- Combine the three final UI overlays into the runtime package
+- Include notes in package/validation manifests; emit real ZIP archives on Linux as well as Windows
+
 ## 1.0.2 — 2026-09-07
 
 - Highlight the calendar date in orange when the last comment was posted today.
