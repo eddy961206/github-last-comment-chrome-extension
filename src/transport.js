@@ -27,7 +27,7 @@
             }
             catch { }
         }
-        request(url, kind, signal) {
+        request(url, kind, signal, priority = 0) {
             if (signal?.aborted)
                 return Promise.reject(fail('ABORTED'));
             const u = new URL(url);
@@ -36,13 +36,14 @@
             if (Date.now() < this.limitedUntil)
                 return Promise.reject(fail('RATE_LIMIT'));
             return new Promise((resolve, reject) => {
-                const job = { url, kind, signal, resolve, reject };
+                const job = { url, kind, signal, resolve, reject, priority };
                 job.abort = () => { const i = this.queue.indexOf(job); if (i >= 0) {
                     this.queue.splice(i, 1);
                     reject(fail('ABORTED'));
                 } };
                 signal?.addEventListener('abort', job.abort, { once: true });
                 this.queue.push(job);
+                this.queue.sort((a, b) => b.priority - a.priority);
                 this.pump();
             });
         }
@@ -150,7 +151,7 @@
                 job.signal?.removeEventListener('abort', abort);
             }
         }
-        async issue(info, me, parent) {
+        async issue(info, me, parent, options = {}) {
             const c = new AbortController();
             let timeout = false;
             const abort = () => c.abort();
@@ -159,14 +160,14 @@
                 c.abort();
             const timer = setTimeout(() => { timeout = true; c.abort(); }, 120000);
             try {
-                const html = await this.request(info.url, 'html', c.signal);
+                const html = await this.request(info.url, 'html', c.signal, options.before ? 1 : 0);
                 return await LCParser.parseLastComment(html, info, me, c.signal, async (id, cursor, count, signal) => {
                     const body = { persistedQueryName: QUERY, query: this.hash, variables: { count, cursor, id, skip: null } };
                     const url = 'https://github.com/_graphql?body=' + encodeURIComponent(JSON.stringify(body));
                     this.own.add(url);
                     if (this.own.size > 300)
                         this.own.delete(this.own.values().next().value);
-                    const raw = await this.request(url, 'json', signal);
+                    const raw = await this.request(url, 'json', signal, options.before ? 1 : 0);
                     this.counts.pages++;
                     let json;
                     try {
@@ -178,7 +179,7 @@
                     if (!json?.data)
                         throw fail('JSON');
                     return json;
-                });
+                }, options);
             }
             catch (e) {
                 if (timeout && !parent?.aborted)
