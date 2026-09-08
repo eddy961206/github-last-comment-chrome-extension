@@ -1,6 +1,6 @@
 # Privacy policy — Last Comment for GitHub
 
-Effective September 6, 2026 · Version 1.0.0
+Effective September 8, 2026 · Version 1.1.0
 
 Last Comment for GitHub is designed to work without developer-operated analytics or data collection.
 
@@ -27,7 +27,7 @@ Requests needed for comments go to GitHub. Avatars and permitted attachment or p
 - Counters are disabled by default. Disabling the option deletes saved counts.
 - Counters and redacted diagnostics can be exported from Settings. Exports occur only when the user explicitly downloads a file.
 - Cache clearing and preference reset are available in Settings.
-- Uninstalling the extension removes locally stored preferences and counters.
+- Uninstalling the extension removes locally stored preferences, counters, and personal notes.
 
 ## Data sale and advertising
 
@@ -40,3 +40,14 @@ The extension communicates with GitHub only as part of its user-facing function.
 ## Contact
 
 Maintainer: eddy961206. Contact through the repository support channel at https://github.com/eddy961206/github-last-comment-chrome-extension/issues. This policy must be updated before changing data practices.
+
+## v1.1.0 — Personal notes
+
+User-authored notes are stored in `chrome.storage.local` under a hashed issue key,
+with their pinned/hover setting and an opaque revision used for edit conflicts.
+They persist until explicitly deleted or the extension is uninstalled. They are
+shared within the Chrome profile, not across devices. The hash is a lookup key,
+not encryption or a guarantee of anonymity. Notes are not posted as GitHub
+comments and are excluded from usage counters and diagnostics. Displayed notes
+are page content, not a secure secrets vault. Fetched comment history remains
+bounded and in page memory only. No permissions or telemetry endpoints are added.
