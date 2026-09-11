@@ -7,11 +7,11 @@
     const OWN = 'data-lc-owned', ROW = '[data-testid="issue-row"],[data-testid="pull-request-row"],[data-testid="list-row"],[data-testid="list-view-item"],[data-listview-item-id],.js-issue-row,.Box-row,[role="row"],[role="listitem"],li';
     const LINKS = 'a[href*="/issues/"],a[href*="/pull/"]';
     const sheet = new CSSStyleSheet();
-    sheet.replaceSync(LCStyles + LCRecency.css);
+    sheet.replaceSync(LCStyles + LCRecency.css + LCRefresh.css);
     let prefs = LC.normalize((await chrome.storage.local.get('preferences')).preferences);
     let transport = new LCTransport(), records = new Map(), cache = new Map(), queue = new Set(), jobs = new Map();
     let current = '', account = '', bar = null, popup = null, timer = null, scanTimer = null, dirty = new Set(), full = true, paused = false, duplicate = false;
-    let timestampTimer = null;
+    let timestampTimer = null, nextAutoAt = 0, autoSaving = false, autoError = false;
     let previewTimer = null, closingTimer = null, hovered = null, dismissed = null, suppressHover = false, pointer = null;
     const noteCache = new Map(), noteDrafts = new Map();
     let noteEpoch = 0, noteHovered = null, noteTimer = null, noteReadPromise = null;
@@ -33,7 +33,8 @@
         return 'search'; return ''; }
     function login() { return (document.querySelector('meta[name="user-login"]')?.content || '').replace(/^@/, ''); }
     const identity = () => location.pathname + location.search + '|' + login().toLowerCase();
-    const allowed = () => prefs.enabled && !paused && !duplicate && !!kind() && document.visibilityState !== 'hidden' && navigator.onLine !== false;
+    const canRequest = () => prefs.enabled && !duplicate && !!kind() && !document.hidden && navigator.onLine !== false;
+    const allowed = () => canRequest() && !paused;
     function metric(name) { if (prefs.localStats)
         chrome.runtime.sendMessage({ type: 'LC_METRIC', metric: name }).catch(() => { }); }
     function signature(row) { const times = [...row.querySelectorAll('relative-time[datetime],time[datetime]')].filter(n => !own(n)).map(n => n.getAttribute('datetime')); const counts = [...row.querySelectorAll('[data-testid="comments-count"],a:has(.octicon-comment)')].filter(n => !own(n)).map(n => n.textContent.trim()); return JSON.stringify([times, counts]); }
@@ -120,11 +121,12 @@
     }
     function make(item) {
         const r = { ...item, host: host(), signature: signature(item.row), state: 'idle', value: null,
-            at: 0, error: null, near: false, inView: false, force: false, note: LCNotes.empty(), noteLoaded: false };
+            at: 0, error: null, attempted: false, changed: false, near: false, inView: false, force: false, note: LCNotes.empty(), noteLoaded: false };
+        restoreSnapshot(r);
         records.set(r.link, r); mount(r);
         near.observe(r.link); inView.observe(r.link); paint(r); return r;
     }
-    function remove(r) { queue.delete(r); r.job?.subscribers.delete(r); if (r.job && !r.job.subscribers.size)
+    function remove(r) { rememberSnapshot(r); queue.delete(r); r.job?.subscribers.delete(r); if (r.job && !r.job.subscribers.size)
         r.job.controller.abort(); near.unobserve(r.link); inView.unobserve(r.link); if (popup?.record === r) {
         keepNoteDraft(); closePopup(false, true);
     } r.host.remove(); records.delete(r.link); if (!records.size) { clearTimeout(timestampTimer); timestampTimer = null; } if (r.layout) {
@@ -138,10 +140,37 @@
             layouts.delete(r.layout);
         }
     } }
-    const ttl = r => r.kind === 'none' ? 60000 : prefs.cacheMinutes * 60000;
+    const snapshotKey = r => account.toLowerCase() + '|' + r.info.key;
+    function rememberSnapshot(r) {
+        if (!r.value && !r.error) return;
+        const key = snapshotKey(r);
+        cache.delete(key);
+        cache.set(key, { value: r.value, at: r.at, signature: r.resultSignature || r.signature,
+            error: r.error, failedAt: r.failedAt, attempted: r.attempted });
+        // Attached rows keep their results. Only recently detached rows need this LRU.
+        while (cache.size > 80) cache.delete(cache.keys().next().value);
+    }
+    function restoreSnapshot(r) {
+        const key = snapshotKey(r), saved = cache.get(key);
+        if (!saved) return;
+        cache.delete(key); cache.set(key, saved);
+        Object.assign(r, { value: saved.value, at: saved.at, resultSignature: saved.signature,
+            changed: saved.signature !== r.signature, error: saved.error, failedAt: saved.failedAt,
+            attempted: saved.attempted, state: saved.error ? 'error' : saved.value ? 'done' : 'idle' });
+        technical.cacheHits++; metric('cache');
+    }
+    function detachJob(r) {
+        const job = r.job;
+        queue.delete(r); r.job = null;
+        job?.subscribers.delete(r);
+        if (job && !job.subscribers.size) { job.controller.abort(); if (jobs.get(job.key) === job) jobs.delete(job.key); }
+        r.force = false; r.requestReason = '';
+        r.state = r.error ? 'error' : r.value ? 'done' : 'idle';
+        if (!r.value && !r.error) r.attempted = false;
+    }
     function paint(r) {
         if (r.timestamp) LCRecency.update(r.timestamp, prefs);
-        const data = r.value, stale = !!data && (Date.now() - r.at >= ttl(data) || r.force || !!r.error);
+        const data = r.value, stale = !!data && (r.changed || r.force || !!r.error);
         const type = data?.kind === 'none' ? 'none' : data ? account && data.author.toLowerCase() === account.toLowerCase() ? 'mine' : data.mentionsMe ? 'mention' : data.isBot ? 'bot' : 'other' : r.error ? 'error' : r.state === 'loading' ? 'busy' : 'idle';
         r.host.hidden = !!data && data.kind === 'none' && !prefs.noComments && !stale && !r.note?.text;
         if (r.host.hidden)
@@ -195,7 +224,7 @@
         if (flag)
             chip.append(node('span', 'flag', flag));
         const reload = button('retry', () => enqueue(r, true), 'action reload', 'refresh');
-        reload.disabled = r.state === 'loading' || r.state === 'queued' || !allowed() || Date.now() < transport.limitedUntil;
+        reload.disabled = r.state === 'loading' || r.state === 'queued' || !canRequest() || Date.now() < transport.limitedUntil;
         chip.append(reload);
         r.noteButton = button('note', () => openNote(r, true), 'action note-button', 'note');
         r.noteButton.addEventListener('pointerenter', event => {
@@ -239,27 +268,18 @@
             delay = Math.min(delay, state.nextDelay);
             count++;
         }
-        if (count) timestampTimer = setTimeout(refreshTimestamps, delay);
+        updateBar();
+        if (records.size) timestampTimer = setTimeout(refreshTimestamps, delay);
     }
-    function enqueue(r, force = false) { if (!r.link.isConnected || (!r.near && !force) || r.job)
-        return; if (!force && r.value && !r.force && Date.now() - r.at < ttl(r.value))
-        return; if (!force && r.error && Date.now() - (r.failedAt || 0) < 30000)
-        return; const key = account.toLowerCase() + '|' + r.info.key + '|' + r.signature; const cached = !force && cache.get(key); if (cached && Date.now() - cached.at < ttl(cached.value)) {
-        r.value = cached.value;
-        r.at = cached.at;
-        r.error = null;
-        r.state = 'done';
-        technical.cacheHits++;
-        metric('cache');
-        paint(r);
-        return;
-    } if (!allowed())
-        return; if (Date.now() < transport.limitedUntil) {
-        r.error = { code: 'RATE_LIMIT' };
-        r.state = 'error';
-        paint(r);
-        return;
-    } r.force ||= force; r.state = 'queued'; r.error = null; queue.add(r); paint(r); queueMicrotask(pump); }
+    function enqueue(r, force = false, reason = force ? 'manual' : 'initial') {
+        if (!r.link.isConnected || (!r.near && !force) || r.job) return;
+        if (!LCRefresh.needsLookup(r, prefs, reason)) return;
+        if (force && canRequest()) paused = false;
+        if (!allowed()) return;
+        if (Date.now() < transport.limitedUntil) { updateBar(); return; }
+        r.force ||= force; r.requestReason = reason; r.state = 'queued'; r.error = null;
+        queue.add(r); paint(r); queueMicrotask(pump);
+    }
     function pump() { if (!allowed() || popup?.historyBusy)
         return; for (const r of [...queue])
         if (!r.link.isConnected || (!r.near && !r.force)) {
@@ -273,7 +293,7 @@
     } while (jobs.size < 2 && queue.size) {
         const r = [...queue].sort((a, b) => Number(b.force) - Number(a.force) || Number(b.inView) - Number(a.inView))[0];
         const key = r.info.key + '|' + r.signature;
-        const job = { key, info: r.info, signature: r.signature, identity: current, account, controller: new AbortController(), subscribers: new Set() };
+        const job = { key, info: r.info, signature: r.signature, identity: current, account, reason: r.requestReason, controller: new AbortController(), subscribers: new Set() };
         jobs.set(key, job);
         attach(job, r);
         for (const other of [...queue])
@@ -281,7 +301,7 @@
                 attach(job, other);
         void run(job);
     } }
-    function attach(job, r) { queue.delete(r); r.job = job; r.state = 'loading'; job.subscribers.add(r); paint(r); }
+    function attach(job, r) { queue.delete(r); r.job = job; r.attempted = true; r.state = 'loading'; job.subscribers.add(r); paint(r); }
     function valid(r, job) { return current === job.identity && identity() === current && records.get(r.link) === r && r.job === job && r.link.isConnected && LCParser.parseConversationUrl(r.link.href)?.key === r.info.key && signature(r.row) === job.signature; }
     async function run(job) {
         try {
@@ -291,19 +311,16 @@
             const receivers = [...job.subscribers].filter(r => valid(r, job));
             if (!receivers.length)
                 return;
-            const entry = { value, at: Date.now() }, key = job.account.toLowerCase() + '|' + job.key;
-            cache.delete(key);
-            cache.set(key, entry);
-            while (cache.size > 80)
-                cache.delete(cache.keys().next().value);
+            const entry = { value, at: Date.now() };
             for (const r of receivers) {
                 r.value = value;
                 r.at = entry.at;
+                r.resultSignature = job.signature; r.changed = false; r.attempted = true;
                 r.error = null;
                 r.force = false;
                 r.job = null;
                 r.state = 'done';
-                paint(r);
+                rememberSnapshot(r); paint(r);
             }
             technical.verified++;
             metric('lookups');
@@ -320,40 +337,50 @@
                     r.state = 'error';
                     r.force = false;
                     r.job = null;
-                    paint(r);
+                    rememberSnapshot(r); paint(r);
                 }
         }
         finally {
             for (const r of job.subscribers)
                 if (r.job === job) {
                     r.job = null;
-                    r.state = r.value ? 'done' : 'idle';
+                    r.state = r.error ? 'error' : r.value ? 'done' : 'idle';
+                    if (!r.value && !r.error) r.attempted = false;
                     if (r.link.isConnected)
                         schedule(r.row);
                 }
             if (jobs.get(job.key) === job)
                 jobs.delete(job.key);
             technical.requests = transport.counts.requests;
+            if (!jobs.size && !queue.size) scheduleAuto();
             pump();
             updateBar();
         }
     }
-    function cancel() { queue.clear(); for (const j of jobs.values())
-        j.controller.abort(); jobs.clear(); for (const r of records.values()) {
-        r.job = null;
-        if (['loading', 'queued'].includes(r.state)) {
-            r.state = r.value ? 'done' : 'idle';
-            r.force = false;
-            paint(r);
+    function cancel() {
+        queue.clear();
+        for (const j of jobs.values()) j.controller.abort();
+        jobs.clear();
+        for (const r of records.values()) {
+            if (r.job || ['loading', 'queued'].includes(r.state)) { detachJob(r); paint(r); }
         }
-    } }
+    }
+    function stopAutoJobs() {
+        // Turning off automatic refresh never cancels a manual refresh or first load.
+        for (const r of [...queue]) if (r.requestReason === 'auto') { detachJob(r); paint(r); }
+        for (const [key, job] of jobs) if (job.reason === 'auto') {
+            job.controller.abort(); jobs.delete(key);
+            for (const r of [...job.subscribers]) { detachJob(r); paint(r); }
+        }
+        pump();
+    }
     function schedule(root) { if (root?.querySelectorAll)
         dirty.add(root);
     else
         full = true; clearTimeout(scanTimer); if (document.visibilityState !== 'hidden')
         scanTimer = setTimeout(scan, 80); }
     function reset() { keepNoteDraft(); closePopup(false, true); cancel(); for (const r of [...records.values()])
-        remove(r); clearTimeout(timestampTimer); timestampTimer = null; cache.clear(); bar?.remove(); bar = null; current = identity(); account = login(); dirty.clear(); full = true; }
+        remove(r); clearTimeout(timer); timer = null; nextAutoAt = 0; clearTimeout(timestampTimer); timestampTimer = null; cache.clear(); bar?.remove(); bar = null; current = identity(); account = login(); dirty.clear(); full = true; }
     function scan() {
         scanTimer = null;
         if (current !== identity())
@@ -381,7 +408,7 @@
                 remove(r);
         for (const item of items) {
             let r = records.get(item.link);
-            if (r && (r.info.key !== item.info.key || r.signature !== signature(item.row) || r.row !== item.row)) {
+            if (r && (r.info.key !== item.info.key || r.row !== item.row)) {
                 remove(r);
                 r = null;
             }
@@ -389,30 +416,35 @@
                 r = make(item);
             else if (!r.host.isConnected || r.host.previousElementSibling !== r.anchor)
                 mount(r);
-            if (r.near)
-                enqueue(r);
+            const observed = signature(item.row);
+            if (r.signature !== observed) {
+                detachJob(r); r.signature = observed;
+                r.changed = !!r.value && r.resultSignature !== observed;
+                paint(r);
+            }
+            if (r.near) enqueue(r);
         }
         ensureBar();
         void loadNotes();
         refreshTimestamps();
-        if (!timer)
-            timer = setTimeout(maintain, 30000);
+        if (!timer && prefs.autoRefresh) scheduleAuto();
     }
-    function maintain() { timer = null; if (current !== identity()) {
-        reset();
-        schedule();
-        return;
-    } if (document.visibilityState !== 'hidden') {
-        for (const r of records.values())
-            if (r.near) {
-                paint(r);
-                enqueue(r);
-            }
-        for (const [k, v] of cache)
-            if (Date.now() - v.at > 900000)
-                cache.delete(k);
-    } if (prefs.enabled && kind())
-        timer = setTimeout(maintain, 30000); }
+    function scheduleAuto() {
+        clearTimeout(timer); timer = null;
+        if (!prefs.autoRefresh || !allowed() || !records.size) { nextAutoAt = 0; return; }
+        // No catch-up burst on tab return, reconnect, or enabling the setting.
+        nextAutoAt = Date.now() + LCRefresh.interval(prefs);
+        timer = setTimeout(maintain, LCRefresh.interval(prefs));
+    }
+    function maintain() {
+        timer = null;
+        if (current !== identity()) { reset(); schedule(); return; }
+        if (!prefs.autoRefresh || !allowed()) return;
+        if (Date.now() >= nextAutoAt) {
+            for (const r of records.values()) if (r.inView) enqueue(r, false, 'auto');
+        }
+        scheduleAuto();
+    }
     function ensureBar() { if (!records.size) {
         bar?.remove();
         bar = null;
@@ -422,19 +454,73 @@
         list.before(bar);
     else
         main.prepend(bar); renderBar(); metric('lists'); }
-    function renderBar() { if (!bar)
-        return; const content = node('div', 'bar'), brand = node('span', 'brand'); brand.append(icon('comment'), document.createTextNode(t('shortName'))); const status = node('span', 'status'); status.setAttribute('role', 'status'); const tools = node('div', 'tools'); tools.append(button('refresh', () => { for (const r of records.values())
-        if (r.inView)
-            enqueue(r, true); }, 'tool'), button(paused ? 'resume' : 'pause', () => { paused = !paused; if (paused)
-        cancel();
-    else
-        for (const r of records.values())
-            if (r.near)
-                enqueue(r); for (const r of records.values())
-        paint(r); renderBar(); }, 'tool')); const settings = button('settings', e => openSettings(e.currentTarget), 'tool'); tools.append(settings); content.append(brand, status, tools); bar.shadowRoot.replaceChildren(content); updateBar(); }
-    function updateBar() { const s = bar?.shadowRoot.querySelector('.status'); if (!s)
-        return; const text = !prefs.enabled ? t('paused') : navigator.onLine === false ? t('offline') : paused ? t('paused') : Date.now() < transport.limitedUntil ? t('limited') : t('ready', { done: [...records.values()].filter(r => r.value).length, total: records.size }); if (s.textContent !== text)
-        s.textContent = text; }
+    function refreshVisible() {
+        if (!canRequest()) return;
+        paused = false;
+        for (const r of records.values()) if (r.inView) enqueue(r, true);
+        scheduleAuto(); updateBar();
+    }
+    async function toggleAuto() {
+        if (autoSaving) return;
+        autoSaving = true; autoError = false; updateBar();
+        try {
+            // Read the latest preferences before a write, preserving other options.
+            const saved = LC.normalize((await chrome.storage.local.get('preferences')).preferences);
+            await chrome.storage.local.set({ preferences: { ...saved, autoRefresh: !prefs.autoRefresh } });
+        } catch {
+            autoError = true;
+            const control = bar?.shadowRoot.querySelector('.auto-toggle');
+            if (control) { control.title = t('saveFailed'); control.setAttribute('aria-label', t('saveFailed')); }
+        } finally { autoSaving = false; updateBar(); }
+    }
+    function renderBar() {
+        if (!bar) return;
+        const active = bar.shadowRoot.activeElement?.className;
+        const content = node('div', 'bar'), brand = node('span', 'brand');
+        brand.append(icon('comment'), document.createTextNode(t('shortName')));
+        const status = node('span', 'status'); status.setAttribute('role', 'status');
+        const tools = node('div', 'tools'), cluster = node('div', 'refresh-cluster');
+        const refresh = button('refresh', refreshVisible, 'tool manual-refresh');
+        const age = node('span', 'refresh-age'); age.tabIndex = 0;
+        // Age changes are deliberately not an aria-live region (no timed announcements).
+        cluster.append(refresh, age);
+        const auto = button('autoRefresh', toggleAuto, 'tool auto-toggle');
+        auto.setAttribute('aria-pressed', String(prefs.autoRefresh));
+        const settings = button('settings', e => openSettings(e.currentTarget), 'tool display-settings');
+        tools.append(cluster, auto, settings); content.append(brand, status, tools);
+        bar.shadowRoot.replaceChildren(content); updateBar();
+        if (active) [...bar.shadowRoot.querySelectorAll('button,span[tabindex]')].find(n => n.className === active)?.focus({ preventScroll: true });
+    }
+    function updateBar() {
+        const root = bar?.shadowRoot, status = root?.querySelector('.status');
+        if (!status) return;
+        const all = [...records.values()].filter(r => r.link.isConnected);
+        const summary = LCRefresh.summarize(all);
+        const busy = jobs.size + queue.size;
+        const errors = all.filter(r => r.error).length;
+        const statusText = autoError ? t('saveFailed') : navigator.onLine === false ? t('offline') : paused ? t('paused') :
+            Date.now() < transport.limitedUntil ? t('limited') : busy ? t('loading') :
+            errors ? t('refreshFailed', { n: errors }) : '';
+        if (status.textContent !== statusText) status.textContent = statusText;
+        status.hidden = !statusText; status.classList.toggle('refresh-error', !!errors && !busy);
+        const age = root.querySelector('.refresh-age');
+        const label = LCRefresh.ageLabel(summary, prefs);
+        if (age.textContent !== label) age.textContent = label;
+        age.title = summary.at ? t('refreshAgeHint', {
+            oldest: LC.date(summary.at, prefs, true), latest: LC.date(summary.latest, prefs, true),
+            done: summary.checked, total: summary.total,
+        }) : t('refreshNotYet');
+        age.setAttribute('aria-label', label + '. ' + age.title);
+        const auto = root.querySelector('.auto-toggle'), pressed = String(prefs.autoRefresh);
+        if (auto.dataset.state !== pressed) {
+            auto.dataset.state = pressed; auto.replaceChildren(icon(prefs.autoRefresh ? 'pause' : 'play'));
+        }
+        auto.setAttribute('aria-pressed', pressed); auto.setAttribute('aria-label', t('autoRefresh'));
+        auto.title = autoError ? t('saveFailed') : t(prefs.autoRefresh ? 'autoPause' : 'autoEnable', { n: prefs.cacheMinutes });
+        auto.setAttribute('aria-description', auto.title); auto.disabled = autoSaving;
+        root.querySelector('.manual-refresh').disabled = !canRequest() || Date.now() < transport.limitedUntil ||
+            all.filter(r => r.inView).length === 0 || all.filter(r => r.inView).every(r => !!r.job || r.state === 'queued');
+    }
     function showPopup(type, anchor, title) {
         if (closePopup() === false) return null;
         const h = host();
@@ -813,7 +899,7 @@
         control.title = t('saveFailed');
     } }); wrapper.append(text, control); return wrapper; }
     function settingsBody() { if (popup?.type !== 'settings')
-        return; const p = popup, focused = p.host.shadowRoot.activeElement?.dataset.pref; p.heading.textContent = t('settingsTitle'); const fields = node('div', 'fields'); fields.append(preferenceField('language', 'language', 'select', [['en', 'English'], ['ko', '한국어']]), preferenceField('avatars', 'avatars', 'checkbox'), preferenceField('noComments', 'noComments', 'checkbox'), preferenceField('cacheMinutes', 'cacheMinutes', 'select', [2, 5, 10].map(n => [String(n), t('minutes', { n })])), preferenceField('timeZone', 'timeZone', 'select', [['local', t('local')], ['Asia/Seoul', t('seoul')], ['UTC', 'UTC']])); p.body.replaceChildren(fields, node('p', 'help', t('legend'))); p.foot.replaceChildren(button('options', () => chrome.runtime.sendMessage({ type: 'LC_OPTIONS' }).catch(() => { }), 'linkbutton')); if (focused)
+        return; const p = popup, focused = p.host.shadowRoot.activeElement?.dataset.pref; p.heading.textContent = t('settingsTitle'); const fields = node('div', 'fields'); fields.append(preferenceField('language', 'language', 'select', [['en', 'English'], ['ko', '한국어']]), preferenceField('avatars', 'avatars', 'checkbox'), preferenceField('noComments', 'noComments', 'checkbox'), preferenceField('autoRefresh', 'autoRefresh', 'checkbox'), preferenceField('cacheMinutes', 'cacheMinutes', 'select', [2, 5, 10].map(n => [String(n), t('minutes', { n })])), preferenceField('timeZone', 'timeZone', 'select', [['local', t('local')], ['Asia/Seoul', t('seoul')], ['UTC', 'UTC']])); p.body.replaceChildren(fields, node('p', 'help', t('legend'))); p.foot.replaceChildren(button('options', () => chrome.runtime.sendMessage({ type: 'LC_OPTIONS' }).catch(() => { }), 'linkbutton')); if (focused)
         p.body.querySelector(`[data-pref="${focused}"]`)?.focus({ preventScroll: true }); position(); }
     function openSettings(anchor) { if (popup?.type === 'settings') {
         closePopup();
@@ -822,12 +908,10 @@
     function diagnostics() { return { schemaVersion: 1, version: chrome.runtime.getManifest().version, counts: { ...technical, requests: transport.counts.requests, pages: transport.counts.pages }, openRecords: records.size, activeJobs: jobs.size, queuedJobs: queue.size, language: prefs.language }; }
     chrome.runtime.onMessage.addListener((message, sender, reply) => { if (sender.id !== chrome.runtime.id)
         return; if (message?.type === 'LC_STATUS') {
-        reply({ supported: !!kind(), enabled: prefs.enabled, duplicate, paused, counts: { ...technical } });
+        reply({ supported: !!kind(), enabled: prefs.enabled, duplicate, paused, autoRefresh: prefs.autoRefresh, counts: { ...technical } });
     } if (message?.type === 'LC_DIAGNOSTICS')
         reply(diagnostics()); if (message?.type === 'LC_REFRESH') {
-        for (const r of records.values())
-            if (r.inView)
-                enqueue(r, true);
+        refreshVisible();
         reply({ ok: true });
     } if (message?.type === 'LC_CLEAR_CACHE') {
         paused = true;
@@ -842,7 +926,13 @@
             if (noteCache.size > 250) noteCache.delete(noteCache.keys().next().value);
             for (const r of records.values()) if (r.noteKey === key) { r.note = value; r.noteLoaded = true; paintNote(r); }
         }
-        if (!changes.preferences) return; const old = prefs; prefs = LC.normalize(changes.preferences.newValue); if (!prefs.enabled) {
+        if (!changes.preferences) return; const old = prefs; prefs = LC.normalize(changes.preferences.newValue);
+        if (old.autoRefresh !== prefs.autoRefresh || old.cacheMinutes !== prefs.cacheMinutes) {
+            if (!prefs.autoRefresh) stopAutoJobs();
+            else paused = false;
+            scheduleAuto();
+        }
+        if (!prefs.enabled) {
         reset();
         clearTimeout(timer);
         timer = null;
@@ -911,21 +1001,20 @@
     window.addEventListener('focus', refreshTimestamps);
     document.addEventListener('visibilitychange', () => { if (document.hidden) {
         clearTimeout(timestampTimer);
-        timestampTimer = null;
+        timestampTimer = null; clearTimeout(scanTimer); scanTimer = null;
         if (popup?.type !== 'note-edit') closePopup();
         cancel();
         clearTimeout(timer);
         timer = null;
     }
     else {
-        refreshTimestamps();
-        schedule();
+        scheduleAuto(); refreshTimestamps();
+        schedule(); // Discovery reattaches cached rows; it does not refresh them.
         pump();
     } });
-    window.addEventListener('offline', () => { if (popup?.type === 'preview') closePopup(); cancel(); updateBar(); });
-    window.addEventListener('online', () => { for (const r of records.values())
-        if (r.near)
-            enqueue(r); });
+    window.addEventListener('offline', () => { if (popup?.type === 'preview') closePopup(); cancel(); clearTimeout(timer); timer = null; updateBar(); });
+    window.addEventListener('online', () => { scheduleAuto(); for (const r of records.values())
+        if (r.near) enqueue(r); updateBar(); });
     window.addEventListener('pagehide', () => { reset(); transport.destroy(); clearTimeout(timer); timer = null; });
     window.addEventListener('pageshow', e => { if (e.persisted) {
         transport = new LCTransport();
