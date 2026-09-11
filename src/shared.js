@@ -171,6 +171,8 @@
                 ...(prefs.timeZone === 'local' ? {} : { timeZone: prefs.timeZone }), year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit', hourCycle: 'h12', timeZoneName: 'short'
             }));
         const v = Object.fromEntries(formatters.get(key).formatToParts(stamp).map(x => [x.type, x.value]));
+        // Some Intl/ICU builds return Latin AM/PM even for ko-KR. Keep product copy consistent.
+        if (prefs.language === 'ko') v.dayPeriod = ({ AM: '오전', PM: '오후' })[v.dayPeriod] || v.dayPeriod;
         const clock = prefs.language === 'ko' ? `${v.dayPeriod} ${v.hour}:${v.minute}` : `${v.hour}:${v.minute} ${v.dayPeriod}`;
         return `${exact ? v.year + '.' : ''}${v.month}.${v.day} (${v.weekday}) ${clock}${exact ? ' ' + v.timeZoneName : ''}`;
     }
