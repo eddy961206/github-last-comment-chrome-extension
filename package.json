@@ -5,7 +5,7 @@
   "description": "Last Comment for GitHub — standalone Manifest V3 Chrome extension",
   "type": "module",
   "scripts": {
-    "validate": "node tests/validate.mjs && node --test tests/*.test.mjs",
+    "validate": "node tests/validate.mjs && node --test tests/recency.test.mjs tests/features.test.mjs tests/refresh.test.mjs",
     "package": "node tools/package.mjs"
   },
   "engines": {
