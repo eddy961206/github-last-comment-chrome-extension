@@ -20,6 +20,7 @@ const runtimeFiles = [
   'help.html',
   'privacy.html',
   'src/shared.js',
+  'src/refresh.js',
   'src/notes.js',
   'src/styles.js',
   'src/recency.js',

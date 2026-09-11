@@ -9,7 +9,7 @@
       <h2>Focused access</h2>
       <p>The extension reads issue/PR URLs, comment authors, timestamps, avatars, and bodies on supported GitHub lists. The signed-in username is used locally to distinguish your replies and username mentions. GitHub requests use the browser’s existing same-origin session; the extension does not read authentication cookies or tokens.</p>
       <h2>Your data, your control</h2>
-      <p>Conversation data stays in page memory. Cached results are reused briefly; displayed results may remain until refreshed, cleared, or the page closes. Route/account changes clear this memory. Preferences are stored in chrome.storage.local, not synchronized. Optional aggregate usage counters persist locally until deleted, disabled, or uninstalled.</p>
+      <p>Conversation data stays in page memory. Results are kept in page memory until refreshed, cleared, or the page closes; a bounded cache reuses recently detached list items. Auto-refresh is off by default. Route/account changes clear this memory. Preferences are stored in chrome.storage.local, not synchronized. Optional aggregate usage counters persist locally until deleted, disabled, or uninstalled.</p>
       <h2>Personal note</h2>
       <p>Personal notes are stored locally under hashed issue keys until deleted or the extension is removed. They are not synced, encrypted by this extension, or included in diagnostics or usage exports. Notes are shared within this Chrome profile and are not GitHub comments. Like other displayed page content, notes rendered on GitHub are not a secure secrets vault.</p>
       <h2>Access &amp; privacy</h2>
@@ -30,7 +30,7 @@
       <h2>필요한 범위만 접근</h2>
       <p>지원하는 GitHub 목록의 이슈/PR 주소, 댓글 작성자, 시각, 아바타 및 본문을 읽습니다. 로그인된 사용자 이름은 본인 댓글과 이름 언급을 구분하기 위해 기기에서 사용합니다. GitHub 요청에는 브라우저의 기존 동일 출처 세션을 사용하며 인증 쿠키나 토큰 값을 직접 읽지 않습니다.</p>
       <h2>데이터 관리</h2>
-      <p>대화 정보는 페이지 메모리에만 보관합니다. 캐시는 일정 시간 재사용하며, 표시 중인 결과는 갱신, 삭제 또는 페이지 종료 시까지 남을 수 있습니다. 경로나 계정 변경 시 해당 메모리를 비웁니다. 설정은 동기화하지 않고 chrome.storage.local에 저장합니다. 선택적 사용 횟수는 삭제, 기능 해제 또는 확장 제거 시까지 기기에 보관됩니다.</p>
+      <p>대화 정보는 페이지 메모리에만 보관합니다. 표시 중인 결과는 갱신, 삭제 또는 페이지 종료 시까지 유지하며 최근 목록 항목은 개수 제한이 있는 메모리 캐시에서 재사용합니다. 자동 갱신은 기본으로 꺼져 있습니다. 경로나 계정 변경 시 해당 메모리를 비웁니다. 설정은 동기화하지 않고 chrome.storage.local에 저장합니다. 선택적 사용 횟수는 삭제, 기능 해제 또는 확장 제거 시까지 기기에 보관됩니다.</p>
       <h2>개인 메모</h2>
       <p>개인 메모는 이슈 식별자의 해시를 키로 사용하여 삭제하거나 확장을 제거할 때까지 기기에 저장됩니다. 동기화하거나 확장 자체에서 암호화하지 않으며, 진단 정보나 사용 통계 내보내기에 포함하지 않습니다. 동일한 Chrome 프로필 안에서 사용하는 개인 메모이며 GitHub 댓글로 등록되지 않습니다. GitHub 페이지에 표시된 메모는 다른 화면 내용처럼 보안 저장소로 취급할 수 없으므로 비밀번호 등을 저장하지 마세요.</p>
       <h2>접근 권한 및 개인정보</h2>

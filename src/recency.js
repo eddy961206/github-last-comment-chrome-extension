@@ -29,6 +29,8 @@
         if (!Number.isFinite(stamp) || !Number.isFinite(now)) return empty;
         const fmt = formatter(prefs), posted = parts(fmt, stamp), current = parts(fmt, now);
         const language = prefs.language === 'ko' ? 'ko' : 'en';
+        // Normalize the day-period tokens without changing the selected time zone.
+        if (language === 'ko') posted.dayPeriod = ({ AM: '오전', PM: '오후' })[posted.dayPeriod] || posted.dayPeriod;
         const age = now - stamp;
         // Future timestamps are not recent, even if their calendar date is today.
         const today = age >= 0 && dayKey(posted) === dayKey(current);

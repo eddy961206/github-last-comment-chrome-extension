@@ -29,7 +29,7 @@ if (JSON.stringify(manifest.permissions) !== JSON.stringify(['storage'])) {
 }
 
 const contentScripts = manifest.content_scripts?.[0];
-const expectedJs = ['src/shared.js', 'src/notes.js', 'src/styles.js', 'src/recency.js', 'src/parser.js', 'src/render.js', 'src/transport.js', 'src/content.js'];
+const expectedJs = ['src/shared.js', 'src/refresh.js', 'src/notes.js', 'src/styles.js', 'src/recency.js', 'src/parser.js', 'src/render.js', 'src/transport.js', 'src/content.js'];
 if (!contentScripts || JSON.stringify(contentScripts.js) !== JSON.stringify(expectedJs)) {
   fail(`content_scripts.js must be ${expectedJs.join(', ')}`);
 }
@@ -72,7 +72,7 @@ for (const locale of ['en', 'ko']) {
   }
 }
 
-const jsFiles = [...expectedJs, 'src/background.js', 'src/pages.js', 'tools/package.mjs', 'tests/validate.mjs', 'tests/features.test.mjs', 'tools/zip.mjs'];
+const jsFiles = [...expectedJs, 'src/background.js', 'src/pages.js', 'tools/package.mjs', 'tests/validate.mjs', 'tests/features.test.mjs', 'tests/refresh.test.mjs', 'tools/zip.mjs'];
 for (const file of jsFiles) {
   try {
     execFileSync(process.execPath, ['--check', path.join(root, file)], { stdio: 'pipe' });

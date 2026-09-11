@@ -83,7 +83,7 @@
         rail.append(el('h1', null, t('appSettings')), a(t('appearance'), '#display'), a(t('statsTitle'), '#statistics'), a(t('connections'), '#privacy'));
         const main = el('div', 'settings-main');
         const display = section('display', 'appearance');
-        display.append(field('enabled', 'enabled', 'checkbox'), field('language', 'language', 'select', [['en', 'English'], ['ko', '한국어']]), field('avatars', 'avatars', 'checkbox'), field('noComments', 'noComments', 'checkbox'), field('timeZone', 'timeZone', 'select', [['local', t('local')], ['Asia/Seoul', t('seoul')], ['UTC', 'UTC']]), field('cacheMinutes', 'cacheMinutes', 'select', [2, 5, 10].map(n => [String(n), t('minutes', { n })])));
+        display.append(field('enabled', 'enabled', 'checkbox'), field('language', 'language', 'select', [['en', 'English'], ['ko', '한국어']]), field('avatars', 'avatars', 'checkbox'), field('noComments', 'noComments', 'checkbox'), field('timeZone', 'timeZone', 'select', [['local', t('local')], ['Asia/Seoul', t('seoul')], ['UTC', 'UTC']]), field('autoRefresh', 'autoRefresh', 'checkbox'), field('cacheMinutes', 'cacheMinutes', 'select', [2, 5, 10].map(n => [String(n), t('minutes', { n })])));
         const stats = section('statistics', 'statsTitle');
         stats.append(el('p', 'small', t('statsDescription')), field('localStats', 'localStats', 'checkbox'));
         const off = el('p', 'small', t('statsOff'));
@@ -117,7 +117,7 @@
     }
     function legal() { const w = el('main', 'wrap prose'); w.append(el('h1', null, t('privacyTitle')), el('p', 'small', t('privacyEffective'))); for (const [heading, body] of [['scopeTitle', 'privacyData'], ['dataTitle', 'privacyRetention'], ['note', 'notesPrivacy'], ['connections', 'privacyNetwork'], ['support', 'privacySharing'], ['localOnly', 'privacyUse'], ['source', 'privacyContact']])
         w.append(el('h2', null, t(heading)), el('p', null, t(body))); w.append(a(t('support'), LC.repo + '/issues')); return w; }
-    function help() { const w = el('main', 'wrap prose'); w.append(el('h1', null, t('help')), el('p', null, t('welcomeNote')), el('h2', null, t('keyboard')), el('p', null, t('keyboardHelp')), el('h2', null, t('note')), el('p', null, t('notesHelp')), el('h2', null, t('limitsTitle')), el('p', null, t('limitsBody')), el('h2', null, t('faqTitle'))); for (const [q, ans] of [['faqPrivate', 'faqPrivateAnswer'], ['faqMissing', 'faqMissingAnswer'], ['faqSlow', 'faqSlowAnswer'], ['faqMetrics', 'faqMetricsAnswer']]) {
+    function help() { const w = el('main', 'wrap prose'); w.append(el('h1', null, t('help')), el('p', null, t('welcomeNote')), el('h2', null, t('keyboard')), el('p', null, t('keyboardHelp')), el('h2', null, t('note')), el('p', null, t('notesHelp')), el('h2', null, t('autoRefresh')), el('p', null, t('refreshHelp')), el('h2', null, t('limitsTitle')), el('p', null, t('limitsBody')), el('h2', null, t('faqTitle'))); for (const [q, ans] of [['faqPrivate', 'faqPrivateAnswer'], ['faqMissing', 'faqMissingAnswer'], ['faqSlow', 'faqSlowAnswer'], ['faqMetrics', 'faqMetricsAnswer']]) {
         const d = el('details');
         d.append(el('summary', null, t(q)), el('p', null, t(ans)));
         w.append(d);
