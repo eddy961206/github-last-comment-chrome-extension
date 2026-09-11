@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 — 2026-09-11
+
+- Keep existing last-comment results on tab return, focus, scrolling, reconnect, and same-issue DOM replacement. Elapsed time alone no longer triggers discovery requests.
+- Default automatic refresh to off for new and existing profiles. Manual refresh and first-time item loading remain available.
+- Replace the general pause button with an icon-only automatic-refresh toggle, descriptive tooltip, keyboard-accessible name and pressed state.
+- Rename result reuse duration to auto-refresh interval (2, 5, or 10 minutes). When enabled, refresh only visible items and wait a new full interval after returning to the tab.
+- Show compact time since the oldest successful visible-item check beside Refresh visible, including exact oldest/newest timestamps on hover. Failed or partial refreshes do not make the whole list look current.
+- Keep date recency colors and elapsed-check text updating locally without network requests, avatar reloads or preview-body replacement.
+- Preserve bounded in-memory snapshots across same-issue row replacement; clear them on route/account changes and explicit cache clear. Update static and dynamic privacy retention wording.
+- Normalize Korean AM/PM tokens across Intl runtimes, fixing the existing Node 20 CI timestamp failures without changing display time zones.
+- Add refresh-policy, age-boundary and locale-fallback regression tests; register the new module in validation and runtime packaging. No new permissions, remote dependencies or telemetry.
+
 ## 1.1.0 — 2026-09-08
 
 - Limit comment-preview hover to the badge, not the label or unused row width
