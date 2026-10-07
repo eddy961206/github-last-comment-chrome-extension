@@ -110,7 +110,7 @@
                 await extStore.set({ preferences: LC.defaults });
         } }));
         privacy.append(tools, a(t('privacy'), 'privacy.html', 'btn'));
-        main.append(display, stats, privacy);
+        main.append(display, ...(extStore ? [LCSiteSettings.create(prefs)] : []), stats, privacy);
         w.append(rail, main);
         void refreshCounters();
         return w;

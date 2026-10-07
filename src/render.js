@@ -14,6 +14,7 @@
                 return '';
             if (!image)
                 return ['https:', 'http:', 'mailto:'].includes(u.protocol) ? u.href : '';
+            if (globalThis.LCSites?.current?.provider === 'gitea') return LCSites.asset(u.href, LCSites.current);
             const allowed = ['camo.githubusercontent.com', 'user-images.githubusercontent.com', 'private-user-images.githubusercontent.com', 'raw.githubusercontent.com', 'avatars.githubusercontent.com'];
             return u.protocol === 'https:' && (allowed.includes(u.hostname) || (u.hostname === 'github.com' && /^\/user-attachments\/assets\//.test(u.pathname))) ? u.href : '';
         }

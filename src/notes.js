@@ -11,7 +11,7 @@
     }
     async function keyFor(info) {
         if (!info || typeof info.key !== 'string' || !/^[^/]+\/[^#]+#\d+$/.test(info.key)) throw new Error('NOTE_KEY');
-        const bytes = new TextEncoder().encode('github.com|' + info.key.toLowerCase());
+        const bytes = new TextEncoder().encode((info.provider === 'gitea' ? info.baseUrl + '|' : 'github.com|') + info.key.toLowerCase());
         const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
         return PREFIX + [...hash].map(x => x.toString(16).padStart(2, '0')).join('');
     }

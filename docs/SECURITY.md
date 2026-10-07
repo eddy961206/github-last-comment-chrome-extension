@@ -1,15 +1,11 @@
 # Security
 
-Please report security issues privately to the repository owner rather than posting exploit details publicly. Use https://github.com/eddy961206/github-last-comment-chrome-extension/issues for general issues and avoid including confidential repository content, tokens, or private comments in public reports.
+Report security issues privately to the repository owner where possible. General support: https://github.com/eddy961206/github-last-comment-chrome-extension/issues. Never include tokens, confidential repository content or private comments in public reports.
 
-The extension intentionally avoids:
+The extension has no remote executable code, personal-token collection, developer telemetry or direct authentication-cookie reads. GitHub remains a narrow static host match. Gitea host access is optional and requested explicitly from settings; dynamic registration is followed by exact origin/port/base-path validation in the content script and same-origin transport. Removing permissions suspends Gitea content activity. HTTP connections are unencrypted.
 
-- remote executable code
-- personal access token collection
-- developer telemetry
-- broad browsing permissions
-- reading authentication cookies or tokens directly
+HTML previews are copied through a bounded allowlist sanitizer; scripts, events, executable elements and unsafe image hosts are excluded. Gitea images are same-origin. Extension pages keep a strict self-only script policy and no outbound connections. Source documents are parsed inertly, not executed.
 
-Comment HTML is sanitized before preview rendering. Executable elements, event attributes, inline styles, and untrusted image hosts are removed or replaced. Extension pages use a strict content security policy with no remote connections.
+Navigation cache data lives in memory-only chrome.storage.session, mediated by the worker and isolated by tab, installation, observed account and rotating document lease. Cache limits prevent unbounded retention. Personal notes are explicit-save local data, not encrypted secrets. See [privacy](PRIVACY.md).
 
-Supported scope is general conversation comments on `https://github.com/*`. Inline code review comments and GitHub Enterprise domains are not supported. If verification fails, the extension reports a lookup status instead of guessing.
+Only ordinary conversation comments are supported. Inline code reviews and GitHub Enterprise are excluded. The Gitea implementation targets standard server-rendered templates and fails visibly on unknown/incomplete structures. Fixture tests do not establish compatibility with all private/custom deployments; see [scope and verification](GITEA-NAVIGATION.md).

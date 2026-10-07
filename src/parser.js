@@ -30,6 +30,7 @@
         return { format: 'text', text: '', truncated: false };
     }
     function parseConversationUrl(href) {
+        if (globalThis.LCSites?.current?.provider === 'gitea') return LCSites.conversation(href, LCSites.current);
         try {
             const url = new URL(href, 'https://github.com');
             if (url.origin !== 'https://github.com' || url.username || url.password)
@@ -143,6 +144,7 @@
         return integer(subject?.comments?.totalCount) ?? integer(subject?.comments?.total_count);
     }
     function safeAvatar(raw) {
+        if (globalThis.LCSites?.current?.provider === 'gitea') return LCSites.asset(raw, LCSites.current);
         if (typeof raw !== 'string' || !raw.trim())
             return '';
         try {

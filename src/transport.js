@@ -12,7 +12,7 @@
                     if (this.own.has(entry.name))
                         return;
                     const u = new URL(entry.name);
-                    if (u.origin !== 'https://github.com' || u.pathname !== '/_graphql')
+                    if (u.origin !== (globalThis.LCSites?.current?.origin || 'https://github.com') || u.pathname !== '/_graphql')
                         return;
                     const q = JSON.parse(u.searchParams.get('body') || 'null');
                     if (q?.persistedQueryName === QUERY && /^[a-f\d]{32,64}$/i.test(q.query))
@@ -31,7 +31,7 @@
             if (signal?.aborted)
                 return Promise.reject(fail('ABORTED'));
             const u = new URL(url);
-            if (u.origin !== 'https://github.com' || !((kind === 'html' && LCParser.parseConversationUrl(url)) || (kind === 'json' && u.pathname === '/_graphql')))
+            if (u.origin !== (globalThis.LCSites?.current?.origin || 'https://github.com') || !((kind === 'html' && LCParser.parseConversationUrl(url)) || (kind === 'json' && u.pathname === '/_graphql')))
                 return Promise.reject(fail('SUBJECT'));
             if (Date.now() < this.limitedUntil)
                 return Promise.reject(fail('RATE_LIMIT'));
@@ -129,9 +129,9 @@
                 if (!response.ok)
                     throw fail(job.kind === 'json' && response.status === 422 ? 'QUERY' : 'HTTP', response.status);
                 const actual = new URL(response.url || job.url);
-                if (actual.origin !== 'https://github.com')
+                if (actual.origin !== (globalThis.LCSites?.current?.origin || 'https://github.com'))
                     throw fail('SUBJECT');
-                if (/^\/(login|sessions?|sso)(\/|$)/.test(actual.pathname))
+                if (/^\/(login|sessions?|sso|user\/login)(\/|$)/.test(actual.pathname.slice(globalThis.LCSites?.current?.basePath.length || 0)))
                     throw fail('AUTH');
                 if (job.kind === 'html' && LCParser.parseConversationUrl(actual.href)?.key !== LCParser.parseConversationUrl(job.url)?.key)
                     throw fail('SUBJECT');
@@ -161,6 +161,7 @@
             const timer = setTimeout(() => { timeout = true; c.abort(); }, 120000);
             try {
                 const html = await this.request(info.url, 'html', c.signal, options.before ? 1 : 0);
+                if (info.provider === 'gitea') return LCGitea.parse(html, info, me, c.signal, options);
                 return await LCParser.parseLastComment(html, info, me, c.signal, async (id, cursor, count, signal) => {
                     const body = { persistedQueryName: QUERY, query: this.hash, variables: { count, cursor, id, skip: null } };
                     const url = 'https://github.com/_graphql?body=' + encodeURIComponent(JSON.stringify(body));
