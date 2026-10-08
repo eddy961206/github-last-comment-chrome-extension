@@ -1,4 +1,4 @@
-# Gitea and navigation cache (1.3.0)
+# Gitea and navigation cache (1.3.1)
 
 ## Setup
 
@@ -14,7 +14,15 @@ Successful results and failures are bounded to 80 recent items per tab, 16 tab b
 
 ## Supported scope and limits
 
-Gitea ordinary server-rendered conversation comments, including standard `/pulls/N` routes. The subject is bound to the issue’s own edit-content metadata; issue bodies, nested quoted comments, timeline events and inline code review threads are not selected as the last ordinary reply. Unknown page shapes or pagination fail closed instead of displaying a guessed result. Target template: Gitea 1.24.6. Custom/future templates and your organization’s private deployment have not been validated here. GitHub’s existing verified paginated parser remains in use.
+Gitea ordinary server-rendered conversation comments, including standard `/pulls/N` routes. The subject is bound to the issue’s own edit-content metadata; issue bodies, nested quoted comments, timeline events and inline code review threads are not selected as the last ordinary reply. Unknown page shapes or pagination fail closed instead of displaying a guessed result. The reader recognizes the original 1.24-style selectors and the observed standard Gitea 28.0.0 layout. Imported GitHub authors are read from Gitea's original-author span. Custom/future layouts remain unverified. GitHub’s existing verified paginated parser remains in use.
+
+## Review verification (2026-10-08, 1.3.1)
+
+Read-only inspection of an authenticated Gitea 28.0.0 deployment confirmed the standard footer (no generator meta), `#issue-list > .item` rows, `.issue-content-left > .comment-list`, `.issue-content-comment` body marker, account menu, and issue/PR content-update metadata. The production `sites.js`, `parser.js` and `gitea.js` reader was run locally on captured real issue DOM. It selected the actual latest ordinary comment with its original author and Markdown body, and returned all three preceding ordinary comments. Private HTML was kept outside this repository and deleted after inspection.
+
+The structures were also compared with Gitea's official [issue template](https://github.com/go-gitea/gitea/blob/main/templates/repo/issue/view_content.tmpl) and [ordinary-comment template](https://github.com/go-gitea/gitea/blob/main/templates/repo/issue/view_content/comments.tmpl).
+
+Permission cleanup and revocation changes were reviewed in source. JavaScript syntax and ZIP contents were checked. No test code was created or test suite executed for this revision. Full installed-Chrome permission prompts, revocation and Back-navigation behavior on the live deployment remain unverified. The earlier synthetic runtime results below describe the original PR, not this corrected revision.
 
 ## Verification (2026-10-07)
 

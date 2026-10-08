@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1 — 2026-10-08
+
+- Support the observed Gitea 28.0.0 footer, issue/PR list rows, conversation container and issue-body marker.
+- Read original author names on imported GitHub comments without a local profile link.
+- Recheck each open Gitea tab's own permission after revocation so unrelated approved hosts remain active.
+- Roll back newly added site settings and newly granted unused host access when registration fails; preserve pre-existing/shared permissions and report cleanup failures.
+- Inspected live Gitea issue/PR DOM and ran the production reader on captured real issue comments. Syntax and runtime ZIP checks only; no test suite was run for this revision. Full installed-Chrome permission/navigation verification remains pending.
+
 ## 1.3.0 — 2026-10-07
 
 - Optional, explicitly approved Gitea installation permissions and ordinary-comment previews, including installation base paths and ports.

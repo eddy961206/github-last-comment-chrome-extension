@@ -6,8 +6,8 @@
     globalThis.__lastCommentExtension = true;
     LCSites.current = LCSites.find(location.href, (await chrome.storage.local.get('giteaSites')).giteaSites);
     if (!LCSites.current) return;
-    if (LCSites.current.provider === 'gitea' && !/gitea/i.test(document.querySelector('meta[name="generator"]')?.content || '')) return;
-    const OWN = 'data-lc-owned', ROW = '[data-testid="issue-row"],[data-testid="pull-request-row"],[data-testid="list-row"],[data-testid="list-view-item"],[data-listview-item-id],.js-issue-row,.Box-row,[role="row"],[role="listitem"],li,.issue.list > .item';
+    if (LCSites.current.provider === 'gitea' && !LCSites.isGitea(document)) return;
+    const OWN = 'data-lc-owned', ROW = '[data-testid="issue-row"],[data-testid="pull-request-row"],[data-testid="list-row"],[data-testid="list-view-item"],[data-listview-item-id],.js-issue-row,.Box-row,[role="row"],[role="listitem"],li,.issue.list > .item,#issue-list > .item';
     const LINKS = 'a[href*="/issues/"],a[href*="/pull/"],a[href*="/pulls/"]';
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(LCStyles + LCRecency.css + LCRefresh.css);
@@ -48,7 +48,7 @@
         if (!info || !text || /^#?\d+$/.test(text) || new URL(link.href).hash)
             continue;
         const row = link.closest(ROW) || link.parentElement;
-        const score = Math.min(text.length, 100) + (link.matches('[data-testid*="title"],.js-navigation-open,.Link--primary,.issue-title') ? 1000 : 0);
+        const score = Math.min(text.length, 100) + (link.matches('[data-testid*="title"],.js-navigation-open,.Link--primary,.issue-title,.list-item-large-title') ? 1000 : 0);
         const old = byRow.get(row);
         if (!old || old.score < score)
             byRow.set(row, { link, row, info, score });
@@ -936,7 +936,15 @@
     } if (showPopup('settings', anchor, t('settingsTitle'))) settingsBody(); }
     function diagnostics() { return { schemaVersion: 1, version: chrome.runtime.getManifest().version, counts: { ...technical, requests: transport.counts.requests, pages: transport.counts.pages }, openRecords: records.size, activeJobs: jobs.size, queuedJobs: queue.size, language: prefs.language }; }
     chrome.runtime.onMessage.addListener((message, sender, reply) => { if (sender.id !== chrome.runtime.id)
-        return; if (message?.type === 'LC_SITE_REVOKED' && LCSites.current.provider === 'gitea') { suspended = true; reset(true); transport.destroy(); reply({ok:true}); return; } if (message?.type === 'LC_STATUS') {
+        return; if (message?.type === 'LC_SITE_REVOKED' && LCSites.current.provider === 'gitea') {
+        // A permission event may concern another host. Check this document's
+        // own installation before cancelling its readers and clearing its UI.
+        chrome.runtime.sendMessage({ type: 'LC_SITE_ACCESS' }).then(access => {
+            if (!access?.ok || !access.allowed) { suspended = true; reset(true); transport.destroy(); }
+            reply({ ok: true });
+        }).catch(() => { suspended = true; reset(true); transport.destroy(); reply({ ok: false }); });
+        return true;
+    } if (message?.type === 'LC_STATUS') {
         reply({ supported: !!kind(), enabled: prefs.enabled, duplicate, paused, autoRefresh: prefs.autoRefresh, counts: { ...technical } });
     } if (message?.type === 'LC_DIAGNOSTICS')
         reply(diagnostics()); if (message?.type === 'LC_REFRESH') {
@@ -1054,4 +1062,3 @@
     await openCache();
     scan();
 })();
-

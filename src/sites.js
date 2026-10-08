@@ -46,6 +46,12 @@
         if (site.provider === 'github' && p === '/search' && !['code','repositories','commits','users','discussions'].includes(u.searchParams.get('type'))) return 'search';
         return '';
     }
+    function isGitea(doc) {
+        // Gitea 28 no longer emits the generator meta tag. Its standard footer
+        // identifies the product; only explicitly approved installations use this.
+        return /gitea/i.test(doc.querySelector('meta[name="generator"]')?.content || '') ||
+            !!doc.querySelector('footer a[href="https://about.gitea.com"]');
+    }
     function login(doc, site) {
         if (site.provider === 'github') return (doc.querySelector('meta[name="user-login"]')?.content || '').replace(/^@/, '');
         return doc.querySelector('.user-menu > .header strong')?.textContent.trim() || '';
@@ -54,5 +60,5 @@
     function asset(raw, site) {
         try { const u = new URL(raw, site.baseUrl + '/'); return raw && u.origin === site.origin && !u.username && !u.password ? u.href : ''; } catch { return ''; }
     }
-    globalThis.LCSites = { normalize, find, permission, conversation, listKind, login, asset, github, current: null };
+    globalThis.LCSites = { normalize, find, permission, conversation, listKind, isGitea, login, asset, github, current: null };
 })();

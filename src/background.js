@@ -30,6 +30,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (sender.id !== chrome.runtime.id || !message || typeof message !== 'object')
         return;
+    if (message.type === 'LC_SITE_ACCESS') {
+        ready.then(async () => {
+            const site = sender.tab?.id != null && sender.frameId === 0 && LCSites.find(sender.url, configuredSites);
+            return { ok: true, allowed: !!site && site.provider === 'gitea' && await chrome.permissions.contains({ origins: [LCSites.permission(site)] }) };
+        }).then(reply).catch(() => reply({ ok: false }));
+        return true;
+    }
     if (message.type === 'LC_CACHE_OPEN' || message.type === 'LC_CACHE_PUT') {
         pending = pending.then(async () => {
             await ready;
