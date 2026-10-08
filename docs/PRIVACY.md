@@ -1,53 +1,31 @@
-# Privacy policy — Last Comment for GitHub
+# Privacy policy — Last Comment
 
-Effective September 8, 2026 · Version 1.1.0
+Effective October 7, 2026 · Version 1.3.0
 
-Last Comment for GitHub is designed to work without developer-operated analytics or data collection.
+## Data processed
 
-## What the extension processes
+The extension reads list structure, issue/PR URLs, ordinary-comment authors, timestamps, avatar URLs and bodies on github.com and Gitea installations explicitly configured and authorized by the user. The displayed signed-in username distinguishes authors, mentions and cache identities. Existing same-origin browser sessions authenticate read-only page requests; authentication cookie and token values are not read directly.
 
-When a supported GitHub issue, pull request, or search list is open, the extension reads the list structure and requests matching GitHub issue pages with the existing browser session. This is necessary to determine the latest ordinary comment and show its author, timestamp, avatar, and preview.
+## Storage and retention
 
-The signed-in username is used locally to distinguish the user's replies and username mentions. The extension does not read authentication cookies or token values directly.
+Verified results and lookup failures are held in page memory and bounded, memory-only `chrome.storage.session`, to avoid repeated lookups after issue → Back navigation. Snapshots are separated by tab, exact installation and observed account. Limits: 80 recent entries per tab, 16 tab buckets, 1,000,000 serialized characters globally. New document lease tokens prevent late writes from superseded documents. Cache clearing, observed account/site changes, tab closure and browser or extension session resets discard cached data. Entries can also be evicted to honor limits. Returning to a list is not a new verification; the original checked timestamp is retained.
 
-## What is stored
+Preferences, explicitly configured Gitea base URLs, user-authored personal notes and optional aggregate counters use `chrome.storage.local`, not sync storage. Notes use hashed issue keys (including installation for Gitea), pinned state and opaque conflict revisions. Hashing is not encryption or anonymity. Notes persist until deleted or the extension is removed and are shared within this Chrome profile. They are not repository comments. Older-comment preview history remains bounded in page memory.
 
-- Display preferences (enabled state, language, time zone, avatars, zero-comment display, cache duration) in `chrome.storage.local`. They are not synchronized.
-- Recent lookup results briefly in the current GitHub tab's session memory to reduce repeated requests.
-- Optional usage counters only when explicitly enabled. They contain aggregate counts (`lists`, `previews`, `lookups`, `failures`, `cache`) and no account IDs, repository names, URLs, comment text, or timestamps. They remain in `chrome.storage.local` until deleted, disabled, or uninstalled.
+## Network and third parties
 
-## What is not sent to the developer
+Comment requests go to the current GitHub or approved Gitea origin. GitHub preview images follow the existing image-host allowlist; Gitea avatars and preview images are same-origin only. HTTP Gitea connections are unencrypted. Those hosts receive ordinary network metadata such as IP addresses. The extension does not send repository content, user identities, credentials, browsing history or counters to the developer. It has no analytics SDK, tracking pixel, advertising or remotely executable code.
 
-No comment content, repository names, issue URLs, GitHub usernames, authentication tokens, cookies, browsing history, or usage counters are transmitted to the developer. There is no developer telemetry endpoint, analytics SDK, tracking pixel, remote script, or advertising.
+Chrome host permission is optional for Gitea and requested through an explicit Add site action. Permission patterns cover a hostname; runtime checks additionally restrict the exact origin/port and installation base path. Site removal revokes its permission when no remaining configuration shares it; reload affected open tabs afterward.
 
-Requests needed for comments go to GitHub. Avatars and permitted attachment or proxy images may be requested from GitHub services while shown. Those providers receive normal network metadata such as IP addresses.
+## User control and exports
 
-## User control
+Automatic refresh and local counters are off by default. Manual refresh remains available. Disabling counters deletes their aggregate counts. Counters contain no issue URLs, names, bodies, usernames or timestamps. Counter and redacted diagnostic exports occur only when explicitly requested; the user decides whether to share files. Notes and comment bodies are excluded from those exports.
 
-- Counters are disabled by default. Disabling the option deletes saved counts.
-- Counters and redacted diagnostics can be exported from Settings. Exports occur only when the user explicitly downloads a file.
-- Cache clearing and preference reset are available in Settings.
-- Uninstalling the extension removes locally stored preferences, counters, and personal notes.
+Settings provide cache clearing (which pauses open list tabs), preference reset and site removal. Explicit notes have individual delete controls. Uninstalling removes extension storage. Notes rendered in repository pages are not a secure secrets vault.
 
-## Data sale and advertising
+## Use and support
 
-The extension does not sell user data and does not use user data for advertising. Use of information received from Google APIs adheres to the Chrome Web Store User Data Policy, including Limited Use requirements.
+Data is used only for this extension's user-facing functionality, never sold or used for advertising. Use of information received from Google APIs adheres to Chrome Web Store User Data Policy, including Limited Use. GitHub-hosted support issues and voluntary attachments are subject to GitHub's privacy policy; do not post confidential information publicly.
 
-## Third parties
-
-The extension communicates with GitHub only as part of its user-facing function. Chrome Web Store and browser services are governed by their respective policies. Support tickets and voluntary attachments are handled by GitHub under GitHub's privacy policy. Do not include confidential information in public support issues.
-
-## Contact
-
-Maintainer: eddy961206. Contact through the repository support channel at https://github.com/eddy961206/github-last-comment-chrome-extension/issues. This policy must be updated before changing data practices.
-
-## v1.1.0 — Personal notes
-
-User-authored notes are stored in `chrome.storage.local` under a hashed issue key,
-with their pinned/hover setting and an opaque revision used for edit conflicts.
-They persist until explicitly deleted or the extension is uninstalled. They are
-shared within the Chrome profile, not across devices. The hash is a lookup key,
-not encryption or a guarantee of anonymity. Notes are not posted as GitHub
-comments and are excluded from usage counters and diagnostics. Displayed notes
-are page content, not a secure secrets vault. Fetched comment history remains
-bounded and in page memory only. No permissions or telemetry endpoints are added.
+Maintainer: eddy961206. Support: https://github.com/eddy961206/github-last-comment-chrome-extension/issues. Update this policy before changing data practices. See [setup and tested scope](GITEA-NAVIGATION.md) and the bilingual static/dynamic `privacy.html` page.

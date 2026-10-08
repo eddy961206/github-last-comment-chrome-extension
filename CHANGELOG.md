@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.1 — 2026-10-08
+
+- Support the observed Gitea 28.0.0 footer, issue/PR list rows, conversation container and issue-body marker.
+- Read original author names on imported GitHub comments without a local profile link.
+- Recheck each open Gitea tab's own permission after revocation so unrelated approved hosts remain active.
+- Roll back newly added site settings and newly granted unused host access when registration fails; preserve pre-existing/shared permissions and report cleanup failures.
+- Inspected live Gitea issue/PR DOM and ran the production reader on captured real issue comments. Syntax and runtime ZIP checks only; no test suite was run for this revision. Full installed-Chrome permission/navigation verification remains pending.
+
+## 1.3.0 — 2026-10-07
+
+- Optional, explicitly approved Gitea installation permissions and ordinary-comment previews, including installation base paths and ports.
+- Preserve bounded per-tab session snapshots across issue/back navigation, including full document reloads.
+- Keep original successful-check timestamps and manual refresh defaults. Opted-in auto-refresh waits a full interval on return.
+- Isolate navigation cache by tab, installation and observed account; reject superseded document writes with rotating lease tokens.
+- Keep existing GitHub note keys stable; include Gitea installation identity in its note keys.
+- Update bilingual runtime/static privacy policy, permissions, packaging and setup documentation.
+- 76 passing unit tests and real-extension fixture navigation checks; see docs/GITEA-NAVIGATION.md for test environment and remaining limits.
+
 ## 1.2.0 — 2026-09-11
 
 - Keep existing last-comment results on tab return, focus, scrolling, reconnect, and same-issue DOM replacement. Elapsed time alone no longer triggers discovery requests.

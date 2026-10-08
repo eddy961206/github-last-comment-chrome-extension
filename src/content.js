@@ -4,8 +4,11 @@
     if (globalThis.__lastCommentExtension)
         return;
     globalThis.__lastCommentExtension = true;
-    const OWN = 'data-lc-owned', ROW = '[data-testid="issue-row"],[data-testid="pull-request-row"],[data-testid="list-row"],[data-testid="list-view-item"],[data-listview-item-id],.js-issue-row,.Box-row,[role="row"],[role="listitem"],li';
-    const LINKS = 'a[href*="/issues/"],a[href*="/pull/"]';
+    LCSites.current = LCSites.find(location.href, (await chrome.storage.local.get('giteaSites')).giteaSites);
+    if (!LCSites.current) return;
+    if (LCSites.current.provider === 'gitea' && !LCSites.isGitea(document)) return;
+    const OWN = 'data-lc-owned', ROW = '[data-testid="issue-row"],[data-testid="pull-request-row"],[data-testid="list-row"],[data-testid="list-view-item"],[data-listview-item-id],.js-issue-row,.Box-row,[role="row"],[role="listitem"],li,.issue.list > .item,#issue-list > .item';
+    const LINKS = 'a[href*="/issues/"],a[href*="/pull/"],a[href*="/pulls/"]';
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(LCStyles + LCRecency.css + LCRefresh.css);
     let prefs = LC.normalize((await chrome.storage.local.get('preferences')).preferences);
@@ -26,27 +29,26 @@
         b.append(icon(glyph));
     else
         b.textContent = t(key); b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); action(e); }); return b; }
-    function theme() { const h = document.documentElement, mode = h.getAttribute('data-color-mode'); return mode === 'dark' || (mode === 'auto' && matchMedia('(prefers-color-scheme:dark)').matches) || (!mode && matchMedia('(prefers-color-scheme:dark)').matches) ? 'dark' : 'light'; }
+    function theme() { const h = document.documentElement, mode = h.getAttribute('data-color-mode'); if (LCSites.current.provider === 'gitea') { const color = getComputedStyle(h).getPropertyValue('color-scheme'); if (color.includes('dark')) return 'dark'; if (color.includes('light')) return 'light'; } return mode === 'dark' || (mode === 'auto' && matchMedia('(prefers-color-scheme:dark)').matches) || (!mode && matchMedia('(prefers-color-scheme:dark)').matches) ? 'dark' : 'light'; }
     function host() { const h = node('div'); h.setAttribute(OWN, ''); h.dataset.theme = theme(); const shadow = h.attachShadow({ mode: 'open' }); shadow.adoptedStyleSheets = [sheet]; return h; }
-    function kind() { const p = location.pathname.replace(/\/$/, ''); if (/^\/[^/]+\/[^/]+\/(issues|pulls)$/.test(p) || /^\/(issues|pulls)(\/(assigned|mentioned|created|recent|review-requested))?$/.test(p))
-        return 'list'; if (p === '/search' && !['code', 'repositories', 'commits', 'users', 'discussions'].includes(new URLSearchParams(location.search).get('type')))
-        return 'search'; return ''; }
-    function login() { return (document.querySelector('meta[name="user-login"]')?.content || '').replace(/^@/, ''); }
+    function kind() { return LCSites.listKind(location.href, LCSites.current); }
+    function login() { return LCSites.login(document, LCSites.current); }
     const identity = () => location.pathname + location.search + '|' + login().toLowerCase();
-    const canRequest = () => prefs.enabled && !duplicate && !!kind() && !document.hidden && navigator.onLine !== false;
+    let cacheReady = false, cacheToken = '', cacheEpoch = 0, suspended = false;
+    const canRequest = () => cacheReady && !suspended && prefs.enabled && !duplicate && !!kind() && !document.hidden && navigator.onLine !== false;
     const allowed = () => canRequest() && !paused;
     function metric(name) { if (prefs.localStats)
         chrome.runtime.sendMessage({ type: 'LC_METRIC', metric: name }).catch(() => { }); }
     function signature(row) { const times = [...row.querySelectorAll('relative-time[datetime],time[datetime]')].filter(n => !own(n)).map(n => n.getAttribute('datetime')); const counts = [...row.querySelectorAll('[data-testid="comments-count"],a:has(.octicon-comment)')].filter(n => !own(n)).map(n => n.textContent.trim()); return JSON.stringify([times, counts]); }
     function discover(root = document.querySelector('main,[role="main"]') || document.body) { const byRow = new Map(), links = [...(root?.querySelectorAll?.(LINKS) || [])]; if (root?.matches?.(LINKS))
         links.unshift(root); for (const link of links) {
-        if (own(link) || link.closest('.markdown-body,.comment-body,header,nav,[role="dialog"],[role="tooltip"]'))
+        if (own(link) || link.closest('.markdown-body,.comment-body,.render-content,header,nav,[role="dialog"],[role="tooltip"]'))
             continue;
         const info = LCParser.parseConversationUrl(link.href), text = link.textContent.trim();
         if (!info || !text || /^#?\d+$/.test(text) || new URL(link.href).hash)
             continue;
         const row = link.closest(ROW) || link.parentElement;
-        const score = Math.min(text.length, 100) + (link.matches('[data-testid*="title"],.js-navigation-open,.Link--primary') ? 1000 : 0);
+        const score = Math.min(text.length, 100) + (link.matches('[data-testid*="title"],.js-navigation-open,.Link--primary,.issue-title,.list-item-large-title') ? 1000 : 0);
         const old = byRow.get(row);
         if (!old || old.score < score)
             byRow.set(row, { link, row, info, score });
@@ -147,6 +149,7 @@
         cache.delete(key);
         cache.set(key, { value: r.value, at: r.at, signature: r.resultSignature || r.signature,
             error: r.error, failedAt: r.failedAt, attempted: r.attempted });
+        if (cacheToken && cacheReady && !suspended) chrome.runtime.sendMessage({ type: 'LC_CACHE_PUT', token: cacheToken, key, entry: cache.get(key) }).catch(() => {});
         // Attached rows keep their results. Only recently detached rows need this LRU.
         while (cache.size > 80) cache.delete(cache.keys().next().value);
     }
@@ -379,13 +382,39 @@
     else
         full = true; clearTimeout(scanTimer); if (document.visibilityState !== 'hidden')
         scanTimer = setTimeout(scan, 80); }
-    function reset() { keepNoteDraft(); closePopup(false, true); cancel(); for (const r of [...records.values()])
-        remove(r); clearTimeout(timer); timer = null; nextAutoAt = 0; clearTimeout(timestampTimer); timestampTimer = null; cache.clear(); bar?.remove(); bar = null; current = identity(); account = login(); dirty.clear(); full = true; }
+    async function openCache() {
+        cacheReady = false; cacheToken = '';
+        const epoch = ++cacheEpoch, who = account;
+        try {
+            const result = await chrome.runtime.sendMessage({ type: 'LC_CACHE_OPEN', account: who });
+            if (epoch !== cacheEpoch || who !== account) return;
+            if (result?.ok) {
+                cacheToken = result.token;
+                for (const [key, entry] of result.entries || []) if (!cache.has(key) || (entry.at || 0) > (cache.get(key).at || 0)) cache.set(key, entry);
+                while (cache.size > 80) cache.delete(cache.keys().next().value);
+            }
+        } catch { /* Session storage unavailable: retain the local-memory cache. */ }
+        finally { if (epoch === cacheEpoch) { cacheReady = true; schedule(); } }
+    }
+    function reset(clear = false) {
+        const changedAccount = account !== login();
+        if (clear || changedAccount) cacheReady = false;
+        keepNoteDraft(); closePopup(false, true); cancel();
+        for (const r of [...records.values()]) remove(r);
+        clearTimeout(timer); timer = null; nextAutoAt = 0;
+        clearTimeout(timestampTimer); timestampTimer = null;
+        bar?.remove(); bar = null; current = identity(); account = login(); dirty.clear(); full = true;
+        if (clear || changedAccount) {
+            cache.clear(); cacheToken = ''; cacheEpoch++;
+            noteCache.clear(); noteDrafts.clear(); noteEpoch++;
+            if (!suspended) void openCache();
+        }
+    }
     function scan() {
         scanTimer = null;
         if (current !== identity())
             reset();
-        if (!prefs.enabled || !kind() || document.visibilityState === 'hidden')
+        if (!cacheReady || suspended || !prefs.enabled || !kind() || document.visibilityState === 'hidden')
             return;
         duplicate = !!document.querySelector('.gh-last-comment-author');
         if (duplicate) {
@@ -907,7 +936,15 @@
     } if (showPopup('settings', anchor, t('settingsTitle'))) settingsBody(); }
     function diagnostics() { return { schemaVersion: 1, version: chrome.runtime.getManifest().version, counts: { ...technical, requests: transport.counts.requests, pages: transport.counts.pages }, openRecords: records.size, activeJobs: jobs.size, queuedJobs: queue.size, language: prefs.language }; }
     chrome.runtime.onMessage.addListener((message, sender, reply) => { if (sender.id !== chrome.runtime.id)
-        return; if (message?.type === 'LC_STATUS') {
+        return; if (message?.type === 'LC_SITE_REVOKED' && LCSites.current.provider === 'gitea') {
+        // A permission event may concern another host. Check this document's
+        // own installation before cancelling its readers and clearing its UI.
+        chrome.runtime.sendMessage({ type: 'LC_SITE_ACCESS' }).then(access => {
+            if (!access?.ok || !access.allowed) { suspended = true; reset(true); transport.destroy(); }
+            reply({ ok: true });
+        }).catch(() => { suspended = true; reset(true); transport.destroy(); reply({ ok: false }); });
+        return true;
+    } if (message?.type === 'LC_STATUS') {
         reply({ supported: !!kind(), enabled: prefs.enabled, duplicate, paused, autoRefresh: prefs.autoRefresh, counts: { ...technical } });
     } if (message?.type === 'LC_DIAGNOSTICS')
         reply(diagnostics()); if (message?.type === 'LC_REFRESH') {
@@ -915,7 +952,7 @@
         reply({ ok: true });
     } if (message?.type === 'LC_CLEAR_CACHE') {
         paused = true;
-        reset();
+        reset(true);
         schedule();
         reply({ ok: true });
     } });
@@ -926,6 +963,7 @@
             if (noteCache.size > 250) noteCache.delete(noteCache.keys().next().value);
             for (const r of records.values()) if (r.noteKey === key) { r.note = value; r.noteLoaded = true; paintNote(r); }
         }
+        if (changes.giteaSites && LCSites.current.provider === 'gitea' && !LCSites.find(location.href, changes.giteaSites.newValue)) { suspended = true; reset(true); transport.destroy(); }
         if (!changes.preferences) return; const old = prefs; prefs = LC.normalize(changes.preferences.newValue);
         if (old.autoRefresh !== prefs.autoRefresh || old.cacheMinutes !== prefs.cacheMinutes) {
             if (!prefs.autoRefresh) stopAutoJobs();
@@ -933,7 +971,7 @@
             scheduleAuto();
         }
         if (!prefs.enabled) {
-        reset();
+        reset(true);
         clearTimeout(timer);
         timer = null;
         return;
@@ -983,7 +1021,7 @@
         r.host.dataset.theme = theme(); if (bar)
         bar.dataset.theme = theme(); if (popup)
         popup.host.dataset.theme = theme(); };
-    new MutationObserver(changeTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-mode', 'data-dark-theme', 'data-light-theme'] });
+    new MutationObserver(changeTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-mode', 'data-dark-theme', 'data-light-theme', 'data-theme'] });
     matchMedia('(prefers-color-scheme:dark)').addEventListener('change', changeTheme);
     for (const ev of ['turbo:load', 'pjax:end', 'soft-nav:end'])
         document.addEventListener(ev, () => schedule());
@@ -1015,11 +1053,12 @@
     window.addEventListener('offline', () => { if (popup?.type === 'preview') closePopup(); cancel(); clearTimeout(timer); timer = null; updateBar(); });
     window.addEventListener('online', () => { scheduleAuto(); for (const r of records.values())
         if (r.near) enqueue(r); updateBar(); });
-    window.addEventListener('pagehide', () => { reset(); transport.destroy(); clearTimeout(timer); timer = null; });
+    window.addEventListener('pagehide', () => { suspended = true; reset(); transport.destroy(); clearTimeout(scanTimer); scanTimer = null; });
     window.addEventListener('pageshow', e => { if (e.persisted) {
-        transport = new LCTransport();
-        schedule();
+        transport = new LCTransport(); suspended = false;
+        void openCache();
     } });
-    reset();
+    current = identity(); account = login();
+    await openCache();
     scan();
 })();

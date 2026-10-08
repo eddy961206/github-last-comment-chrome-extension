@@ -5,15 +5,15 @@
     <nav><a href="help.html">Help · 도움말</a><a href="privacy.html">Privacy · 개인정보처리방침</a></nav></header>
     <main class="wrap prose" lang="en">
       <h1>Privacy policy</h1>
-      <p class="small">Effective September 8, 2026 · Version 1.1.0</p>
+      <p class="small">Effective October 7, 2026 · Version 1.3.0</p>
       <h2>Focused access</h2>
-      <p>The extension reads issue/PR URLs, comment authors, timestamps, avatars, and bodies on supported GitHub lists. The signed-in username is used locally to distinguish your replies and username mentions. GitHub requests use the browser’s existing same-origin session; the extension does not read authentication cookies or tokens.</p>
+      <p>Reads issue/PR URLs, authors, dates, avatars and comment bodies on GitHub and explicitly authorized Gitea sites. The displayed signed-in username separates accounts and marks mentions. Requests use the existing same-origin browser session; authentication cookie or token values are not read.</p>
       <h2>Your data, your control</h2>
-      <p>Conversation data stays in page memory. Results are kept in page memory until refreshed, cleared, or the page closes; a bounded cache reuses recently detached list items. Auto-refresh is off by default. Route/account changes clear this memory. Preferences are stored in chrome.storage.local, not synchronized. Optional aggregate usage counters persist locally until deleted, disabled, or uninstalled.</p>
+      <p>Up to 80 recent results per tab are retained in chrome.storage.session, scoped by tab, installation and observed account. The cache is bounded globally to 16 tab buckets and 1,000,000 serialized characters. It is not synced or written to chrome.storage.local. Back navigation reuses results until manual or opted-in automatic refresh. Clear caches, observed account/site changes, tab closure, extension disable/reload/update, and browser restart discard cached data. Preferences and explicitly saved notes remain in chrome.storage.local.</p>
       <h2>Personal note</h2>
       <p>Personal notes are stored locally under hashed issue keys until deleted or the extension is removed. They are not synced, encrypted by this extension, or included in diagnostics or usage exports. Notes are shared within this Chrome profile and are not GitHub comments. Like other displayed page content, notes rendered on GitHub are not a secure secrets vault.</p>
       <h2>Access &amp; privacy</h2>
-      <p>Requests needed for comments go to GitHub. Avatar and permitted attachment/proxy images may be requested from GitHub services while shown. Those providers receive normal network metadata such as IP addresses. No comment data or analytics are transmitted to the developer. No analytics SDKs, tracking pixels, remote scripts, or advertising are included.</p>
+      <p>Comment requests go only to the page’s GitHub or authorized Gitea origin. GitHub preview images use the existing allowlist; Gitea avatars and images are restricted to the same origin. HTTP Gitea traffic is unencrypted. No developer telemetry, remote scripts, tracking pixels, or advertising.</p>
       <h2>Support &amp; feedback</h2>
       <p>Exports occur only when you explicitly download a file. You decide whether to share it. Support tickets and voluntary attachments are handled by GitHub under GitHub’s privacy policy. Do not put confidential information in public support issues.</p>
       <h2>Private by design. No developer telemetry.</h2>
@@ -26,15 +26,15 @@
     <hr>
     <main class="wrap prose" lang="ko">
       <h1>개인정보 처리방침</h1>
-      <p class="small">시행일: 2026년 9월 8일 · 버전 1.1.0</p>
+      <p class="small">시행일: 2026년 10월 7일 · 버전 1.3.0</p>
       <h2>필요한 범위만 접근</h2>
-      <p>지원하는 GitHub 목록의 이슈/PR 주소, 댓글 작성자, 시각, 아바타 및 본문을 읽습니다. 로그인된 사용자 이름은 본인 댓글과 이름 언급을 구분하기 위해 기기에서 사용합니다. GitHub 요청에는 브라우저의 기존 동일 출처 세션을 사용하며 인증 쿠키나 토큰 값을 직접 읽지 않습니다.</p>
+      <p>GitHub와 직접 허용한 Gitea에서 이슈·PR 주소, 작성자, 시각, 아바타와 댓글 본문을 읽어. 화면의 로그인 사용자 이름으로 계정을 구분하고 멘션을 표시해. 기존 동일 출처 로그인 세션을 사용하며 인증 쿠키나 토큰 값을 직접 읽지 않아.</p>
       <h2>데이터 관리</h2>
-      <p>대화 정보는 페이지 메모리에만 보관합니다. 표시 중인 결과는 갱신, 삭제 또는 페이지 종료 시까지 유지하며 최근 목록 항목은 개수 제한이 있는 메모리 캐시에서 재사용합니다. 자동 갱신은 기본으로 꺼져 있습니다. 경로나 계정 변경 시 해당 메모리를 비웁니다. 설정은 동기화하지 않고 chrome.storage.local에 저장합니다. 선택적 사용 횟수는 삭제, 기능 해제 또는 확장 제거 시까지 기기에 보관됩니다.</p>
+      <p>최근 결과를 탭별 최대 80개까지 chrome.storage.session 메모리에 보관하고 탭·사이트·확인된 계정별로 구분해. 전체 한도는 탭 16개와 직렬화 문자 100만 개이며 동기화하거나 chrome.storage.local에 댓글을 저장하지 않아. 뒤로가기는 기존 결과를 사용하고 직접 갱신하거나 자동 갱신을 켰을 때만 다시 확인해. 캐시 삭제, 감지된 계정·사이트 전환, 탭 종료, 확장 비활성화·재로드·업데이트, 브라우저 재시작 시 캐시가 삭제돼. 설정과 직접 저장한 메모는 chrome.storage.local에 남아.</p>
       <h2>개인 메모</h2>
       <p>개인 메모는 이슈 식별자의 해시를 키로 사용하여 삭제하거나 확장을 제거할 때까지 기기에 저장됩니다. 동기화하거나 확장 자체에서 암호화하지 않으며, 진단 정보나 사용 통계 내보내기에 포함하지 않습니다. 동일한 Chrome 프로필 안에서 사용하는 개인 메모이며 GitHub 댓글로 등록되지 않습니다. GitHub 페이지에 표시된 메모는 다른 화면 내용처럼 보안 저장소로 취급할 수 없으므로 비밀번호 등을 저장하지 마세요.</p>
       <h2>접근 권한 및 개인정보</h2>
-      <p>댓글 조회에 필요한 요청은 GitHub로 전송됩니다. 표시 중인 아바타와 허용된 첨부/프록시 이미지는 GitHub 서비스에 요청할 수 있습니다. 해당 서비스는 IP 주소 등 통상적인 네트워크 정보를 받습니다. 댓글이나 통계를 개발자에게 전송하지 않습니다. 분석 SDK, 추적 픽셀, 원격 스크립트 및 광고는 포함하지 않습니다.</p>
+      <p>댓글 요청은 현재 GitHub 또는 허용한 Gitea로만 전송해. GitHub 미리보기 이미지는 기존 허용 목록을 사용하고 Gitea 아바타·이미지는 같은 출처로 제한해. HTTP Gitea 통신은 암호화되지 않아. 개발자 통계 전송, 원격 스크립트, 추적 픽셀, 광고는 없어.</p>
       <h2>지원 및 의견</h2>
       <p>내보내기는 사용자가 파일 다운로드를 직접 선택할 때만 수행하며 공유 여부는 사용자가 결정합니다. 지원 요청과 자발적 첨부 파일은 GitHub의 개인정보 처리방침에 따라 처리됩니다. 공개 지원 이슈에 기밀 정보를 포함하지 마세요.</p>
       <h2>개인정보 중심 설계. 개발자에게 통계를 전송하지 않습니다.</h2>
