@@ -60,5 +60,15 @@
     function asset(raw, site) {
         try { const u = new URL(raw, site.baseUrl + '/'); return raw && u.origin === site.origin && !u.username && !u.password ? u.href : ''; } catch { return ''; }
     }
-    globalThis.LCSites = { normalize, find, permission, conversation, listKind, isGitea, login, asset, github, current: null };
+    function selfLogins(site, account, links) {
+        if (!account) return [];
+        const current = account.toLowerCase(), names = [current];
+        if (site.provider === 'gitea') {
+            for (const link of links) {
+                if (link.baseUrl === site.baseUrl && link.giteaLogin === current) names.push(link.githubLogin);
+            }
+        }
+        return names;
+    }
+    globalThis.LCSites = { normalize, find, permission, conversation, listKind, isGitea, login, asset, selfLogins, github, current: null };
 })();

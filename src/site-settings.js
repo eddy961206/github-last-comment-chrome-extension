@@ -14,7 +14,8 @@
         const list = node('div'); list.style.overflowWrap = 'anywhere';
         form.append(label, input, add); section.append(form, status, list);
         async function show() {
-            const sites = (await chrome.storage.local.get('giteaSites')).giteaSites || [];
+            const saved = await chrome.storage.local.get(['giteaSites', 'giteaIdentityLinks']);
+            const sites = saved.giteaSites || [], links = saved.giteaIdentityLinks || [];
             list.replaceChildren();
             for (const raw of sites) {
                 const site = LCSites.normalize(raw); if (!site) continue;
@@ -22,15 +23,50 @@
                 remove.addEventListener('click', async () => {
                     remove.disabled = true;
                     try {
-                        const current = (await chrome.storage.local.get('giteaSites')).giteaSites || [];
+                        const currentSettings = await chrome.storage.local.get(['giteaSites', 'giteaIdentityLinks']);
+                        const current = currentSettings.giteaSites || [];
                         const next = current.filter(v => v !== raw);
-                        await chrome.storage.local.set({ giteaSites: next });
+                        await chrome.storage.local.set({ giteaSites: next, giteaIdentityLinks: (currentSettings.giteaIdentityLinks || []).filter(v => v.baseUrl !== site.baseUrl) });
                         if (!next.map(LCSites.normalize).filter(Boolean).some(v => LCSites.permission(v) === LCSites.permission(site))) await chrome.permissions.remove({ origins: [LCSites.permission(site)] });
                         await chrome.runtime.sendMessage({ type: 'LC_SITES_SYNC' });
                         await show(); status.textContent = ko ? '사이트를 제거했어. 이미 열린 탭은 새로고침해.' : 'Site removed. Reload already-open tabs.';
                     } catch { status.textContent = ko ? '제거에 실패했어. 다시 시도해.' : 'Could not remove this site. Retry.'; remove.disabled = false; }
                 });
                 row.append(text, remove); list.append(row);
+                const identities = node('form'); identities.className = 'identity-form';
+                identities.append(node('p', ko ? '이전 댓글도 본인으로 구분하려면 Gitea 로그인 이름과 예전 GitHub 이름을 연결해. 해당 Gitea 계정으로 로그인했을 때만 적용해.' : 'Link your Gitea login to your previous GitHub name to recognize imported comments as yours. Applies only while signed in as that Gitea account.'));
+                const giteaLabel = node('label', ko ? '내 Gitea 로그인 이름' : 'My Gitea login'), giteaLogin = node('input');
+                const githubLabel = node('label', ko ? '이전 댓글의 내 GitHub 이름' : 'My GitHub name on imported comments'), githubLogin = node('input');
+                for (const field of [giteaLogin, githubLogin]) {
+                    field.required = true; field.maxLength = 64; field.pattern = '[A-Za-z0-9][A-Za-z0-9_.-]{0,63}'; field.autocomplete = 'off'; field.setAttribute('autocapitalize', 'none'); field.spellcheck = false;
+                }
+                giteaLabel.append(giteaLogin); githubLabel.append(githubLogin);
+                const saveIdentity = node('button', ko ? '내 계정 연결 저장' : 'Save my account link'); saveIdentity.type = 'submit'; saveIdentity.className = 'btn';
+                identities.append(giteaLabel, githubLabel, saveIdentity); list.append(identities);
+                identities.addEventListener('submit', async event => {
+                    event.preventDefault(); saveIdentity.disabled = true;
+                    try {
+                        const savedLinks = (await chrome.storage.local.get('giteaIdentityLinks')).giteaIdentityLinks || [];
+                        const current = giteaLogin.value.trim().toLowerCase(), previous = githubLogin.value.trim().toLowerCase();
+                        const next = savedLinks.filter(v => v.baseUrl !== site.baseUrl || v.giteaLogin !== current);
+                        if (next.length >= 100) throw new Error('IDENTITY_LINK_LIMIT');
+                        next.push({ baseUrl: site.baseUrl, giteaLogin: current, githubLogin: previous });
+                        await chrome.storage.local.set({ giteaIdentityLinks: next });
+                        await show(); status.textContent = ko ? '저장했어. 이 계정의 이전 댓글도 본인 색상으로 표시해. 열린 이슈 목록에도 바로 적용해.' : 'Saved. Imported comments by this account use your own-author color, including on open lists.';
+                    } catch { status.textContent = ko ? '계정 연결을 저장하지 못했어. 다시 시도해.' : 'Could not save the account link. Retry.'; saveIdentity.disabled = false; }
+                });
+                for (const link of links.filter(v => v.baseUrl === site.baseUrl)) {
+                    const identityRow = node('p', `${link.giteaLogin} ↔ ${link.githubLogin} `), clear = node('button', ko ? '연결 제거' : 'Remove link'); clear.type = 'button'; clear.className = 'btn';
+                    clear.addEventListener('click', async () => {
+                        clear.disabled = true;
+                        try {
+                            const savedLinks = (await chrome.storage.local.get('giteaIdentityLinks')).giteaIdentityLinks || [];
+                            await chrome.storage.local.set({ giteaIdentityLinks: savedLinks.filter(v => v.baseUrl !== site.baseUrl || v.giteaLogin !== link.giteaLogin) });
+                            await show(); status.textContent = ko ? '계정 연결을 제거했어.' : 'Account link removed.';
+                        } catch { status.textContent = ko ? '계정 연결을 제거하지 못했어. 다시 시도해.' : 'Could not remove the account link. Retry.'; clear.disabled = false; }
+                    });
+                    identityRow.append(clear); list.append(identityRow);
+                }
             }
         }
         form.addEventListener('submit', async event => {

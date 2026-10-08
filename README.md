@@ -4,9 +4,9 @@
 
 A standalone Manifest V3 Chrome extension that shows the latest ordinary issue and pull request comment in list views. English is the default; Korean is available in Settings. No Tampermonkey, separate user script, or personal access token is required.
 
-## Version 1.3.2
+## Version 1.3.3
 
-Gitea installations can now be added explicitly in settings, including the observed standard Gitea 28.0.0 interface and imported GitHub comment authors. Version 1.3.2 fixes popup tab API access and accepts registration requests from extension settings opened in a browser tab. Opening an issue and going Back reuses recent verified results rather than fetching every row again. Site-add failures clean up newly granted unused permissions; revoking one host leaves other approved hosts active. See [Gitea setup, navigation cache and verification](docs/GITEA-NAVIGATION.md).
+Version 1.3.3 adds imported-author account links and distinct author presentation on Gitea conversation pages. Gitea installations can be added explicitly in settings, including the observed standard Gitea 28.0.0 interface and imported GitHub comment authors. Version 1.3.2 fixes popup tab API access and accepts registration requests from extension settings opened in a browser tab. Opening an issue and going Back reuses recent verified results rather than fetching every row again. Site-add failures clean up newly granted unused permissions; revoking one host leaves other approved hosts active. See [Gitea setup, navigation cache and verification](docs/GITEA-NAVIGATION.md).
 
 ## Highlights
 
@@ -33,6 +33,10 @@ This is not an unread-status or reply-needed indicator. Blue represents another 
 
 Open the extension popup → **All settings / 전체 설정** → **Gitea sites / Gitea 사이트**. Enter the installation base URL, choose Add site, approve Chrome's host permission and reload the Gitea issue list.
 
+If your Gitea login differs from the GitHub name on imported comments, enter both names under that configured site and choose **Save my account link / 내 계정 연결 저장**. Only that Gitea account treats the linked GitHub name as its own author. Other sites and accounts keep their own identities. The link controls author colors; mention highlighting continues to use the current site's login name. Links can be removed individually or with the site.
+
+Gitea issue/PR conversation pages also distinguish ordinary authors through name/header colors, comment borders and initial avatars. Your linked comments show **You / 나**. These are local presentation changes; server content is preserved. Turning off the extension's Enable setting restores the original presentation.
+
 Examples: `https://git.example.com`, `https://example.com/gitea`, `http://git.example:3000`. Do not enter a repository or issue URL. HTTP traffic is unencrypted. Only configured installations are activated; the runtime additionally checks the exact port and base path. Removing a configured site stops its use and removes its host permission when no other configured installation uses that permission.
 
 ## Use
@@ -47,7 +51,7 @@ Personal notes are stored only in this Chrome profile and are never posted to th
 
 GitHub uses a static `https://github.com/*` content-script match. Gitea uses optional host permissions requested only when adding a site, plus the `scripting` permission for dynamic registration. Broad optional patterns are not an all-sites permission grant at installation.
 
-Fetched results stay in page memory and bounded, memory-only `chrome.storage.session` snapshots for navigation reuse. The worker separates them by tab, installation and observed account. Defaults: 80 recent results per tab, 16 tab buckets and 1,000,000 serialized characters globally. Tab closure, explicit clearing, observed account/site changes and browser/extension session resets discard cached data. Preferences, configured site addresses, explicit personal notes and optional aggregate counters use `chrome.storage.local`, never sync storage.
+Fetched results stay in page memory and bounded, memory-only `chrome.storage.session` snapshots for navigation reuse. The worker separates them by tab, installation and observed account. Defaults: 80 recent results per tab, 16 tab buckets and 1,000,000 serialized characters globally. Tab closure, explicit clearing, observed account/site changes and browser/extension session resets discard cached data. Preferences, configured site addresses, explicitly saved account-name links, explicit personal notes and optional aggregate counters use `chrome.storage.local`, never sync storage.
 
 No repository content, credentials, browsing history or counters are sent to the developer. Existing same-origin browser sessions are used without reading authentication cookie or token values. See [privacy policy](docs/PRIVACY.md), the readable [privacy page](privacy.html), and [security scope](docs/SECURITY.md).
 
@@ -58,7 +62,7 @@ npm run validate
 npm run package
 ```
 
-No runtime npm dependencies or external archivers are needed. Packaging produces `dist/last-comment-extension-1.3.2.zip` with runtime files only. Validation checks manifests, locales, referenced paths, JavaScript syntax and regression tests.
+No runtime npm dependencies or external archivers are needed. Packaging produces `dist/last-comment-extension-1.3.3.zip` with runtime files only. Validation checks manifests, locales, referenced paths, JavaScript syntax and regression tests.
 
 The 1.3.0 suite has 76 passing tests. Real-extension browser testing with synthetic GitHub JSON and Gitea 1.24.6-template-derived HTML verified three rows per platform: 3 initial comment requests, still 3 after three issue/Back cycles, and 6 after manual refresh. The Gitea fixture includes 70 ordinary comments. These fixtures do not constitute testing your authenticated private Gitea deployment or every custom theme. Full details and remaining limits are in [GITEA-NAVIGATION.md](docs/GITEA-NAVIGATION.md).
 

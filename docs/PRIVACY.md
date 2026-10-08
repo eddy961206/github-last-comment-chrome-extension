@@ -1,6 +1,6 @@
 # Privacy policy — Last Comment
 
-Effective October 7, 2026 · Version 1.3.0
+Effective October 8, 2026 · Version 1.3.3
 
 ## Data processed
 
@@ -10,7 +10,7 @@ The extension reads list structure, issue/PR URLs, ordinary-comment authors, tim
 
 Verified results and lookup failures are held in page memory and bounded, memory-only `chrome.storage.session`, to avoid repeated lookups after issue → Back navigation. Snapshots are separated by tab, exact installation and observed account. Limits: 80 recent entries per tab, 16 tab buckets, 1,000,000 serialized characters globally. New document lease tokens prevent late writes from superseded documents. Cache clearing, observed account/site changes, tab closure and browser or extension session resets discard cached data. Entries can also be evicted to honor limits. Returning to a list is not a new verification; the original checked timestamp is retained.
 
-Preferences, explicitly configured Gitea base URLs, user-authored personal notes and optional aggregate counters use `chrome.storage.local`, not sync storage. Notes use hashed issue keys (including installation for Gitea), pinned state and opaque conflict revisions. Hashing is not encryption or anonymity. Notes persist until deleted or the extension is removed and are shared within this Chrome profile. They are not repository comments. Older-comment preview history remains bounded in page memory.
+Preferences, explicitly configured Gitea base URLs, explicitly saved Gitea-login/GitHub-name display links, user-authored personal notes and optional aggregate counters use `chrome.storage.local`, not sync storage. Name links are scoped to a site's exact base URL and the signed-in Gitea account. They change author colors, grant no account access, are excluded from counter/diagnostic exports, and persist until individually removed, their site is removed, or the extension is uninstalled. Notes use hashed issue keys (including installation for Gitea), pinned state and opaque conflict revisions. Hashing is not encryption or anonymity. Notes persist until deleted or the extension is removed and are shared within this Chrome profile. They are not repository comments. Older-comment preview history remains bounded in page memory.
 
 ## Network and third parties
 

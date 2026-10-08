@@ -12,6 +12,8 @@
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(LCStyles + LCRecency.css + LCRefresh.css);
     let prefs = LC.normalize((await chrome.storage.local.get('preferences')).preferences);
+    let identityLinks = (await chrome.storage.local.get('giteaIdentityLinks')).giteaIdentityLinks || [];
+    const authors = new LCGiteaAuthors();
     let transport = new LCTransport(), records = new Map(), cache = new Map(), queue = new Set(), jobs = new Map();
     let current = '', account = '', bar = null, popup = null, timer = null, scanTimer = null, dirty = new Set(), full = true, paused = false, duplicate = false;
     let timestampTimer = null, nextAutoAt = 0, autoSaving = false, autoError = false;
@@ -33,6 +35,12 @@
     function host() { const h = node('div'); h.setAttribute(OWN, ''); h.dataset.theme = theme(); const shadow = h.attachShadow({ mode: 'open' }); shadow.adoptedStyleSheets = [sheet]; return h; }
     function kind() { return LCSites.listKind(location.href, LCSites.current); }
     function login() { return LCSites.login(document, LCSites.current); }
+    function conversationInfo() { return LCSites.current.provider === 'gitea' ? LCSites.conversation(location.href, LCSites.current) : null; }
+    function paintAuthors() {
+        const info = conversationInfo();
+        if (!suspended && prefs.enabled && info) authors.update(info, LCSites.selfLogins(LCSites.current, account, identityLinks), theme(), prefs.language);
+        else authors.clear();
+    }
     const identity = () => location.pathname + location.search + '|' + login().toLowerCase();
     let cacheReady = false, cacheToken = '', cacheEpoch = 0, suspended = false;
     const canRequest = () => cacheReady && !suspended && prefs.enabled && !duplicate && !!kind() && !document.hidden && navigator.onLine !== false;
@@ -174,7 +182,8 @@
     function paint(r) {
         if (r.timestamp) LCRecency.update(r.timestamp, prefs);
         const data = r.value, stale = !!data && (r.changed || r.force || !!r.error);
-        const type = data?.kind === 'none' ? 'none' : data ? account && data.author.toLowerCase() === account.toLowerCase() ? 'mine' : data.mentionsMe ? 'mention' : data.isBot ? 'bot' : 'other' : r.error ? 'error' : r.state === 'loading' ? 'busy' : 'idle';
+        const mine = data?.kind === 'comment' && LCSites.selfLogins(LCSites.current, account, identityLinks).includes(data.author.toLowerCase());
+        const type = data?.kind === 'none' ? 'none' : data ? mine ? 'mine' : data.mentionsMe ? 'mention' : data.isBot ? 'bot' : 'other' : r.error ? 'error' : r.state === 'loading' ? 'busy' : 'idle';
         r.host.hidden = !!data && data.kind === 'none' && !prefs.noComments && !stale && !r.note?.text;
         if (r.host.hidden)
             r.host.style.display = 'none';
@@ -398,6 +407,7 @@
     }
     function reset(clear = false) {
         const changedAccount = account !== login();
+        authors.clear();
         if (clear || changedAccount) cacheReady = false;
         keepNoteDraft(); closePopup(false, true); cancel();
         for (const r of [...records.values()]) remove(r);
@@ -414,6 +424,7 @@
         scanTimer = null;
         if (current !== identity())
             reset();
+        paintAuthors();
         if (!cacheReady || suspended || !prefs.enabled || !kind() || document.visibilityState === 'hidden')
             return;
         duplicate = !!document.querySelector('.gh-last-comment-author');
@@ -958,6 +969,11 @@
     } });
     chrome.storage.onChanged.addListener((changes, area) => {
         if (area !== 'local') return;
+        if (changes.giteaIdentityLinks) {
+            identityLinks = changes.giteaIdentityLinks.newValue || [];
+            for (const r of records.values()) paint(r);
+            paintAuthors();
+        }
         for (const [key, change] of Object.entries(changes)) if (LCNotes.validKey(key)) {
             noteEpoch++; const value = LCNotes.normalize(change.newValue); noteCache.set(key, value);
             if (noteCache.size > 250) noteCache.delete(noteCache.keys().next().value);
@@ -965,6 +981,7 @@
         }
         if (changes.giteaSites && LCSites.current.provider === 'gitea' && !LCSites.find(location.href, changes.giteaSites.newValue)) { suspended = true; reset(true); transport.destroy(); }
         if (!changes.preferences) return; const old = prefs; prefs = LC.normalize(changes.preferences.newValue);
+        paintAuthors();
         if (old.autoRefresh !== prefs.autoRefresh || old.cacheMinutes !== prefs.cacheMinutes) {
             if (!prefs.autoRefresh) stopAutoJobs();
             else paused = false;
@@ -994,6 +1011,15 @@
         return; if (identity() !== current) {
         schedule();
         return;
+    } if (conversationInfo()) {
+        for (const mutation of mutations) {
+            const target = mutation.target.nodeType === 1 ? mutation.target : mutation.target.parentElement;
+            if (!target || own(target)) continue;
+            const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
+            if (mutation.type === 'childList' && nodes.length && nodes.every(n => n.nodeType === 1 && n.hasAttribute(OWN))) continue;
+            if (target.closest('.comment-list')) { schedule(); break; }
+        }
+        return;
     } if (!kind())
         return; for (const m of mutations) {
         const target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
@@ -1017,7 +1043,7 @@
     } if (dirty.size || full)
         schedule([...dirty][0]); });
     observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['href', 'datetime', 'content'] });
-    const changeTheme = () => { for (const r of records.values())
+    const changeTheme = () => { paintAuthors(); for (const r of records.values())
         r.host.dataset.theme = theme(); if (bar)
         bar.dataset.theme = theme(); if (popup)
         popup.host.dataset.theme = theme(); };

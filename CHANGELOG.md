@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.3 — 2026-10-08
+
+- Add explicit Gitea-login to GitHub-name links in each configured site's settings. Imported comments use the own-author color only when signed into that site's linked Gitea account.
+- Distinguish authors on Gitea issue/PR conversation pages using consistent author colors, header/name outlines, comment borders and initial avatars. Linked own comments use a neutral color and a You/나 label. Inline reviews and timeline events are excluded.
+- Repaint open badges immediately when a link is saved or removed, without refreshing comments or changing their checked timestamps. Keep the ordinary account identity for cache isolation.
+- Keep links device-local with individual removal controls; removing a site also removes its links. Update privacy disclosures for the explicitly saved names.
+- Verified 1.3.3 author colors, own-author labels, initial avatars, preview history and one cached Back-navigation cycle on live Chrome Gitea. Syntax and all 31 runtime package entries checked; no test suite executed.
+- Chrome 1.3.2 site addition succeeded according to the user. Live Chrome observation confirmed imported-author badges and a rendered ordinary-comment preview. Corrected popup UI could not be inspected because extension pages remain blocked by the browser tool.
+
 ## 1.3.2 — 2026-10-08
 
 - Fix the popup's `extTabs.query is not a function` error by retaining the `chrome.tabs` API object rather than its `query` function.

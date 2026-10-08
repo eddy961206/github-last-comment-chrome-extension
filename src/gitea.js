@@ -2,6 +2,21 @@
 (() => {
     'use strict';
     const fail = code => Object.assign(new Error(code), { code });
+    function author(left, info) {
+        if (!left) return null;
+        // Imported authors are plain text, not local account/profile links.
+        if (left.querySelector(':scope > .migrate')) {
+            const imported = left.firstElementChild;
+            if (imported?.tagName === 'SPAN' && imported.querySelector('svg')) return { login: imported.textContent.trim(), element: imported };
+        }
+        for (const link of left.querySelectorAll('a[href]')) {
+            if (!link.textContent.trim()) continue; // Inline avatar, not the name.
+            const url = new URL(link.getAttribute('href'), info.url);
+            const path = url.pathname.slice(info.basePath.length);
+            if (url.origin === info.origin && !url.hash && !url.search && /^\/[^/]+$/.test(path)) return { login: decodeURIComponent(path.slice(1)), element: link };
+        }
+        return null;
+    }
     function parse(html, info, me, signal, options = {}) {
         if (signal?.aborted) throw fail('ABORTED');
         const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -23,30 +38,19 @@
             const left = header?.querySelector('.comment-header-left');
             const time = left?.querySelector('relative-time[datetime],time[datetime]')?.getAttribute('datetime');
             if (!left || !Number.isFinite(Date.parse(time))) throw fail('COMMENT_SHAPE');
-            let author = '';
-            for (const link of left.querySelectorAll('a[href]')) {
-                const u = new URL(link.getAttribute('href'), info.url);
-                const part = u.pathname.slice(info.basePath.length);
-                if (u.origin === info.origin && !u.hash && !u.search && /^\/[^/]+$/.test(part)) { author = decodeURIComponent(part.slice(1)); break; }
-            }
-            // Imported GitHub authors have no local profile link. Gitea renders
-            // their original name in the leading span beside the migration icon.
-            if (!author && left.querySelector(':scope > .migrate')) {
-                const imported = left.firstElementChild;
-                if (imported?.tagName === 'SPAN' && imported.querySelector('svg')) author = imported.textContent.trim();
-            }
+            const actor = author(left, info), name = actor ? actor.login : '';
             const body = row.querySelector(':scope > .comment-container > .comment-body');
             if (!body) throw fail('COMMENT_SHAPE');
             const raw = body.querySelector(`[id="issuecomment-${match[1]}-raw"]`);
             const markup = body.querySelector(':scope > .render-content');
             const source = raw ? { body: raw.textContent } : { bodyHTML: markup?.innerHTML || '' };
             const image = row.querySelector(':scope > .timeline-avatar img');
-            comments.set(match[1], { kind: 'comment', commentId: match[1], author, time,
+            comments.set(match[1], { kind: 'comment', commentId: match[1], author: name, time,
                 avatar: LCSites.asset(image?.getAttribute('src') || '', info),
-                commentUrl: `${info.url}#issuecomment-${match[1]}`, isBot: /\[bot\]$/i.test(author),
+                commentUrl: `${info.url}#issuecomment-${match[1]}`, isBot: /\[bot\]$/i.test(name),
                 _mentionSource: source, _mentionLogin: me });
         }
         return options.before ? LCParser.historyWindow(comments, options.before) : LCParser.newest(comments);
     }
-    globalThis.LCGitea = Object.freeze({ parse });
+    globalThis.LCGitea = Object.freeze({ parse, author });
 })();

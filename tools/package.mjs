@@ -24,6 +24,7 @@ const runtimeFiles = [
   'src/site-settings.js',
   'src/navigation-cache.js',
   'src/gitea.js',
+  'src/gitea-authors.js',
   'src/refresh.js',
   'src/notes.js',
   'src/styles.js',
