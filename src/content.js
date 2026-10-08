@@ -1,6 +1,8 @@
 /* Isolated-world content script. Fetched comment content stays in memory; explicit personal notes use local storage. */
 (async () => {
     'use strict';
+    // A server deployment supplies the same UI without a browser extension.
+    if (document.documentElement.hasAttribute('data-lc-web')) return;
     if (globalThis.__lastCommentExtension)
         return;
     globalThis.__lastCommentExtension = true;
@@ -73,7 +75,7 @@
             r.state = r.value ? 'done' : 'idle';
             paint(r);
         }
-    } pump(); }, { rootMargin: '220px 0px' });
+    } pump(); updateBar(); }, { rootMargin: '220px 0px' });
     const inView = new IntersectionObserver(entries => { for (const e of entries) {
         const r = records.get(e.target);
         if (!r)
@@ -83,7 +85,7 @@
             r.near = true;
             enqueue(r);
         }
-    } });
+    } updateBar(); });
     function anchorFor(r) { let a = r.link.closest('h1,h2,h3,h4,h5,h6,[role="heading"],[data-testid="list-view-item-title-container"],[data-testid="issue-title-container"]') || r.link; if (!r.row.contains(a))
         a = r.link; while (a.parentElement !== r.row && a.parentElement && getComputedStyle(a.parentElement).display === 'inline')
         a = a.parentElement; while (a.nextElementSibling?.matches('.Label,[data-testid="issue-label"],[data-testid="label"]'))

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.4 — 2026-10-08
+
+- Add an optional Gitea custom-footer/static-asset deployment using the same production feature modules, with an account-local Web Storage adapter and Web Locks for note conflicts/counters.
+- Include server settings, imported-author links, manual/automatic refresh, previews/history, notes, counters, privacy/help and diagnostics. Replace Chrome site registration with the fixed server installation.
+- Bound navigation snapshots and invalidate active/restored pages after cache clearing. Keep document-local epochs to cover older Back/Forward-cached documents, and exclude internal raw epochs from JSON preference notifications.
+- Preserve the existing footer and asset directory in timestamped backups. Verify the archive hash and compatible template hooks before restarting the named Gitea container; restore prior files on failure.
+- Prevent extension 1.3.4 from adding a second UI to server-enabled pages.
+- Refresh toolbar availability after viewport observations even while requests are paused, so cache clearing does not leave manual refresh disabled.
+- Observed real Gitea 28.0.0 issue UI, author links, previews, notes and cross-tab preference updates in an extension-free in-app browser. Checked generated JavaScript syntax and packaged runtime files. No test code or test suite was created or executed.
+
 ## 1.3.3 — 2026-10-08
 
 - Add explicit Gitea-login to GitHub-name links in each configured site's settings. Imported comments use the own-author color only when signed into that site's linked Gitea account.

@@ -1,12 +1,13 @@
 {
   "name": "github-last-comment-chrome-extension",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "private": true,
-  "description": "Last Comment for GitHub \u2014 standalone Manifest V3 Chrome extension",
+  "description": "Last Comment for GitHub — standalone Manifest V3 Chrome extension",
   "type": "module",
   "scripts": {
     "validate": "node tests/validate.mjs && node --test tests/recency.test.mjs tests/features.test.mjs tests/refresh.test.mjs tests/sites-cache.test.mjs",
-    "package": "node tools/package.mjs"
+    "package": "node tools/package.mjs",
+    "package:gitea": "node tools/package-gitea.mjs"
   },
   "engines": {
     "node": ">=18"
