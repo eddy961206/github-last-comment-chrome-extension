@@ -4,9 +4,9 @@
 
 A standalone Manifest V3 Chrome extension that shows the latest ordinary issue and pull request comment in list views. English is the default; Korean is available in Settings. No Tampermonkey, separate user script, or personal access token is required.
 
-## Version 1.3.1
+## Version 1.3.2
 
-Gitea installations can now be added explicitly in settings, including the observed standard Gitea 28.0.0 interface and imported GitHub comment authors. Opening an issue and going Back reuses recent verified results rather than fetching every row again. Site-add failures clean up newly granted unused permissions; revoking one host leaves other approved hosts active. See [Gitea setup, navigation cache and verification](docs/GITEA-NAVIGATION.md).
+Gitea installations can now be added explicitly in settings, including the observed standard Gitea 28.0.0 interface and imported GitHub comment authors. Version 1.3.2 fixes popup tab API access and accepts registration requests from extension settings opened in a browser tab. Opening an issue and going Back reuses recent verified results rather than fetching every row again. Site-add failures clean up newly granted unused permissions; revoking one host leaves other approved hosts active. See [Gitea setup, navigation cache and verification](docs/GITEA-NAVIGATION.md).
 
 ## Highlights
 
@@ -58,7 +58,7 @@ npm run validate
 npm run package
 ```
 
-No runtime npm dependencies or external archivers are needed. Packaging produces `dist/last-comment-extension-1.3.1.zip` with runtime files only. Validation checks manifests, locales, referenced paths, JavaScript syntax and regression tests.
+No runtime npm dependencies or external archivers are needed. Packaging produces `dist/last-comment-extension-1.3.2.zip` with runtime files only. Validation checks manifests, locales, referenced paths, JavaScript syntax and regression tests.
 
 The 1.3.0 suite has 76 passing tests. Real-extension browser testing with synthetic GitHub JSON and Gitea 1.24.6-template-derived HTML verified three rows per platform: 3 initial comment requests, still 3 after three issue/Back cycles, and 6 after manual refresh. The Gitea fixture includes 70 ordinary comments. These fixtures do not constitute testing your authenticated private Gitea deployment or every custom theme. Full details and remaining limits are in [GITEA-NAVIGATION.md](docs/GITEA-NAVIGATION.md).
 

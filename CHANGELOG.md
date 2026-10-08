@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2 — 2026-10-08
+
+- Fix the popup's `extTabs.query is not a function` error by retaining the `chrome.tabs` API object rather than its `query` function.
+- Authorize site registration and cache clearing by the sending extension page's URL/ID instead of requiring `sender.tab` to be absent. Options pages hosted in a tab are legitimate callers; website content scripts remain excluded.
+- Show the site-registration failure reason in settings so a failed worker response is distinguishable from a permission denial or registration API error.
+- Observed the live Chrome Gitea list without extension badges before correction. Extension settings/reload UI is blocked by the browser tool's URL policy and requires the user to perform those steps. Runtime verification of the corrected installation is recorded separately below when available.
+
 ## 1.3.1 — 2026-10-08
 
 - Support the observed Gitea 28.0.0 footer, issue/PR list rows, conversation container and issue-body marker.

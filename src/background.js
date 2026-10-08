@@ -5,12 +5,19 @@ const METRICS = new Set(['lists', 'previews', 'lookups', 'failures', 'cache']);
 let configuredSites = [];
 const ready = chrome.storage.local.get('giteaSites').then(v => { configuredSites = v.giteaSites || []; });
 let pending = ready;
+function extensionPage(sender) {
+    if (sender.id !== chrome.runtime.id) return false;
+    try {
+        const url = new URL(sender.url);
+        return url.protocol === 'chrome-extension:' && url.hostname === chrome.runtime.id;
+    } catch { return false; }
+}
 function trusted(sender) {
     if (sender.id !== chrome.runtime.id)
         return false;
     try {
         const u = new URL(sender.url || sender.origin);
-        return (u.protocol === 'chrome-extension:' && u.hostname === chrome.runtime.id) || (sender.tab?.id != null && sender.frameId === 0 && !!LCSites.find(u.href, configuredSites));
+        return extensionPage(sender) || (sender.tab?.id != null && sender.frameId === 0 && !!LCSites.find(u.href, configuredSites));
     }
     catch {
         return false;
@@ -48,7 +55,13 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         return true;
     }
     if (!trusted(sender)) return;
-    if (message.type === 'LC_SITES_SYNC' && !sender.tab) { syncSites().then(() => reply({ ok: true })).catch(() => reply({ ok: false })); return true; }
+    if (message.type === 'LC_SITES_SYNC') {
+        // An options page opened in a browser tab can also have sender.tab.
+        // Privilege comes from the extension URL, not the absence of a tab.
+        if (!extensionPage(sender)) { reply({ ok: false, error: 'EXTENSION_PAGE_REQUIRED' }); return; }
+        syncSites().then(() => reply({ ok: true })).catch(error => reply({ ok: false, error: 'SITE_SYNC', detail: error.message }));
+        return true;
+    }
     if (message.type === 'LC_NOTE_WRITE') {
         pending = pending.then(() => LCNotes.write(chrome.storage.local, message))
             .then(reply).catch(() => reply({ ok: false, error: 'NOTE_SAVE' }));
@@ -71,7 +84,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         pending = pending.then(() => chrome.storage.local.remove('counters')).then(() => reply({ ok: true })).catch(() => reply({ ok: false }));
         return true;
     }
-    if (message.type === 'LC_CLEAR_CACHE' && !sender.tab) {
+    if (message.type === 'LC_CLEAR_CACHE' && extensionPage(sender)) {
         pending = pending.then(() => navCache.clear()).catch(() => {});
         pending.then(() => chrome.tabs.query({})).then(async (tabs) => {
             await Promise.all(tabs.filter(t => t.id != null).map(t => chrome.tabs.sendMessage(t.id, { type: 'LC_CLEAR_CACHE' }).catch(() => { })));

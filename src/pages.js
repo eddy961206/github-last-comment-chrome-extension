@@ -7,7 +7,7 @@
     // render with defaults and disable features that need the extension.
     const extStore = (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) || null;
     const extRuntime = (typeof chrome !== 'undefined' && chrome.runtime) || null;
-    const extTabs = (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) || null;
+    const extTabs = (typeof chrome !== 'undefined' && typeof chrome.tabs?.query === 'function') ? chrome.tabs : null;
     const webLang = (typeof navigator !== 'undefined' && String(navigator.language || '').toLowerCase().startsWith('ko')) ? 'ko' : 'en';
     let prefs = LC.normalize({ language: webLang }), toastTimer;
     if (extStore) {

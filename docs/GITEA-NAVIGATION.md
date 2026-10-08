@@ -1,4 +1,4 @@
-# Gitea and navigation cache (1.3.1)
+# Gitea and navigation cache (1.3.2)
 
 ## Setup
 
@@ -21,6 +21,14 @@ Gitea ordinary server-rendered conversation comments, including standard `/pulls
 Read-only inspection of an authenticated Gitea 28.0.0 deployment confirmed the standard footer (no generator meta), `#issue-list > .item` rows, `.issue-content-left > .comment-list`, `.issue-content-comment` body marker, account menu, and issue/PR content-update metadata. The production `sites.js`, `parser.js` and `gitea.js` reader was run locally on captured real issue DOM. It selected the actual latest ordinary comment with its original author and Markdown body, and returned all three preceding ordinary comments. Private HTML was kept outside this repository and deleted after inspection.
 
 The structures were also compared with Gitea's official [issue template](https://github.com/go-gitea/gitea/blob/main/templates/repo/issue/view_content.tmpl) and [ordinary-comment template](https://github.com/go-gitea/gitea/blob/main/templates/repo/issue/view_content/comments.tmpl).
+
+## Chrome runtime correction (2026-10-08, 1.3.2)
+
+The installed 1.3.1 popup reported `TypeError: extTabs.query is not a function`. Source inspection confirmed that the code saved `chrome.tabs.query` itself as `extTabs` and then tried to call `extTabs.query`. The correction saves the API object.
+
+The site-add operation and cleanup could also receive no response: the worker required `!sender.tab` for `LC_SITES_SYNC`. A legitimate extension options page opened in a browser tab can have this property. The worker now authorizes internal privileged operations by the extension's own URL and ID. Content scripts on GitHub/Gitea are not authorized to register sites or clear the global cache. See Chrome's [MessageSender documentation](https://developer.chrome.com/docs/extensions/reference/api/runtime#type-MessageSender).
+
+The actual Chrome Gitea page had 20 list rows and zero extension badge hosts before the correction. The browser tool prohibits accessing `chrome-extension://` and `chrome://` pages; it cannot reload the extension, inspect its settings UI or press its host-permission prompt. These steps require the user. JavaScript syntax and ZIP generation were checked without executing test suites. Corrected Chrome runtime verification remains pending until the user reloads and adds the site.
 
 Permission cleanup and revocation changes were reviewed in source. JavaScript syntax and ZIP contents were checked. No test code was created or test suite executed for this revision. Full installed-Chrome permission prompts, revocation and Back-navigation behavior on the live deployment remain unverified. The earlier synthetic runtime results below describe the original PR, not this corrected revision.
 

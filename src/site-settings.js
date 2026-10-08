@@ -54,11 +54,12 @@
                     added = true;
                 }
                 const reply = await chrome.runtime.sendMessage({ type: 'LC_SITES_SYNC' });
-                if (!reply?.ok) throw new Error('registration');
+                if (!reply?.ok) throw new Error(reply?.detail || reply?.error || 'NO_SITE_SYNC_RESPONSE');
                 registered = true;
                 await show(); input.value = '';
                 status.textContent = ko ? '추가했어. Gitea 이슈 목록을 새로고침해. HTTP 사이트는 암호화되지 않아.' : 'Added. Reload the Gitea issue list. HTTP sites are not encrypted.';
-            } catch {
+            } catch (error) {
+                const reason = String(error.message).slice(0, 400);
                 try {
                     if (!registered) {
                         let cleanupFailed = false, next = null;
@@ -85,9 +86,9 @@
                         if (cleanupFailed) throw new Error('cleanup');
                     }
                     await show();
-                    status.textContent = ko ? '권한 또는 등록에 실패했어. 주소와 Chrome 사이트 권한을 확인해.' : 'Permission or registration failed. Check the URL and Chrome site permissions.';
+                    status.textContent = (ko ? '권한 또는 등록에 실패했어. 주소와 Chrome 사이트 권한을 확인해. 원인: ' : 'Permission or registration failed. Check the URL and Chrome site permissions. Reason: ') + reason;
                 } catch {
-                    status.textContent = ko ? '추가 실패 후 정리도 실패했어. Chrome의 확장 프로그램 사이트 권한과 등록 목록을 직접 확인해.' : 'Addition and cleanup failed. Check Chrome extension site access and the configured list manually.';
+                    status.textContent = (ko ? '추가 실패 후 정리도 실패했어. Chrome의 확장 프로그램 사이트 권한과 등록 목록을 직접 확인해. 최초 원인: ' : 'Addition and cleanup failed. Check Chrome extension site access and the configured list manually. Initial reason: ') + reason;
                 }
             }
             finally { add.disabled = false; }
