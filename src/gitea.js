@@ -31,7 +31,8 @@
         if (timeline.querySelector('.pagination, .load-more, [data-next-page], [data-has-more="true"]')) throw fail('INCOMPLETE');
         const comments = new Map();
         for (const row of timeline.children) {
-            if (!row.matches('.timeline-item.comment') || row === first || row.classList.contains('form')) continue;
+            // Gitea places its PR merge controls in the timeline with a comment class.
+            if (!row.matches('.timeline-item.comment') || row === first || row.matches('.form, .pull-merge-box')) continue;
             const match = row.id.match(/^issuecomment-(\d+)$/);
             if (!match) throw fail('COMMENT_SHAPE');
             const header = row.querySelector(':scope > .comment-container > .comment-header');
