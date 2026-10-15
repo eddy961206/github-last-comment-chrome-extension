@@ -16,6 +16,8 @@ The installer expects a Docker container with the `gitea` executable and `git` u
 
 Existing footer content is preserved. Updates replace only this package's recognized one-line include; unfamiliar edits are refused. A failed installation restores the prior footer/assets and attempts a restart. Review the result log and page before declaring success. Runtime JavaScript changes can be served without restarting, but cached assets may persist. Changing the footer asset revision requires a restart because production templates are loaded at startup.
 
+Issue/PR list creator names retain the original Gitea color for the signed-in account and its explicitly linked imported identity. Other creators use a restrained purple (light/dark variants). This affects creator profile links below each list title, not repository links or the Last Comment badge. The existing author presentation restores the original inline style when disabled or when an identity becomes the current account. List re-rendering and automatic page updates reapply the distinction.
+
 ## Automatic page updates
 
 The server deployment checks the visible issue/PR conversation or list every 30 seconds with one same-origin HTML GET. It applies changed conversation entries, review summaries, reactions and list rows without reloading the document. Existing Gitea global observers initialize inserted controls. A list change refreshes visible Last Comment badges through the existing bounded request queue. Code/diff tabs, PR merge controls and sidebar widgets are not replaced.

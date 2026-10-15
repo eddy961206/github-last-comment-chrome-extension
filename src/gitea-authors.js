@@ -8,7 +8,37 @@
         return hash % 360;
     }
     class Authors {
-        constructor() { this.rows = new Map(); }
+        constructor() { this.rows = new Map(); this.listAuthors = new Map(); }
+        clearListAuthor(element) {
+            const previous = this.listAuthors.get(element);
+            if (!previous) return;
+            if (element.style.getPropertyValue('color') === previous.installed) {
+                if (previous.color) element.style.setProperty('color', previous.color, previous.priority);
+                else element.style.removeProperty('color');
+            }
+            this.listAuthors.delete(element);
+        }
+        updateList(site, self, theme) {
+            const found = new Set();
+            for (const container of document.querySelectorAll('#issue-list > .item > .item-main > .item-body > div.flex-text-inline')) {
+                const actor = LCGitea.author(container, { ...site, url: site.baseUrl + '/' });
+                if (!actor?.login) continue;
+                const element = actor.element;
+                // Keep the site's original color for the signed-in account and
+                // its explicitly linked migration identity. Guests are unclassified.
+                if (!self.length || self.includes(actor.login.toLowerCase())) continue;
+                found.add(element);
+                const color = theme === 'dark' ? '#d2a8ff' : '#8250df';
+                let record = this.listAuthors.get(element);
+                if (record && element.style.getPropertyValue('color') === record.installed && record.theme === theme) continue;
+                if (record) this.clearListAuthor(element);
+                record = { color: element.style.getPropertyValue('color'), priority: element.style.getPropertyPriority('color'), theme };
+                element.style.setProperty('color', color);
+                record.installed = element.style.getPropertyValue('color');
+                this.listAuthors.set(element, record);
+            }
+            for (const element of this.listAuthors.keys()) if (!found.has(element)) this.clearListAuthor(element);
+        }
         clearRow(row) {
             const record = this.rows.get(row);
             if (!record) return;
@@ -20,8 +50,16 @@
             }
             this.rows.delete(row);
         }
-        clear() { for (const row of [...this.rows.keys()]) this.clearRow(row); }
-        update(info, self, theme, language) {
+        clear() {
+            for (const row of [...this.rows.keys()]) this.clearRow(row);
+            for (const element of [...this.listAuthors.keys()]) this.clearListAuthor(element);
+        }
+        update(info, self, theme, language, site) {
+            this.updateList(site, self, theme);
+            if (!info) {
+                for (const row of [...this.rows.keys()]) this.clearRow(row);
+                return;
+            }
             const rows = [...document.querySelectorAll('.issue-content-left > .comment-list > .timeline-item.comment, .issue-content .comment-list > .timeline > .timeline-item.comment')]
                 .filter(row => !row.classList.contains('form'));
             const found = new Set(rows);

@@ -40,7 +40,7 @@
     function conversationInfo() { return LCSites.current.provider === 'gitea' ? LCSites.conversation(location.href, LCSites.current) : null; }
     function paintAuthors() {
         const info = conversationInfo();
-        if (!suspended && prefs.enabled && info) authors.update(info, LCSites.selfLogins(LCSites.current, account, identityLinks), theme(), prefs.language);
+        if (!suspended && prefs.enabled && LCSites.current.provider === 'gitea') authors.update(info, LCSites.selfLogins(LCSites.current, account, identityLinks), theme(), prefs.language, LCSites.current);
         else authors.clear();
     }
     const identity = () => location.pathname + location.search + '|' + login().toLowerCase();
