@@ -963,6 +963,17 @@
         reply(diagnostics()); if (message?.type === 'LC_REFRESH') {
         refreshVisible();
         reply({ ok: true });
+    } if (message?.type === 'LC_LIVE_REFRESH') {
+        if (allowed()) {
+            // Reconcile replaced list rows before requesting their visible badges.
+            // IntersectionObserver has not necessarily delivered the new rows yet.
+            full = true; scan();
+            for (const r of records.values()) {
+                const rect = r.link.getBoundingClientRect();
+                if (rect.width && rect.height && rect.bottom > 0 && rect.top < innerHeight) enqueue(r, true);
+            }
+        }
+        reply({ ok: true });
     } if (message?.type === 'LC_CLEAR_CACHE') {
         paused = true;
         reset(true);
