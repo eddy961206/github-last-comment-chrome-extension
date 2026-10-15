@@ -53,7 +53,7 @@ const common = modules.map(read).join('\n') + `\n
    return text;
  } });
 })();\n` + read('gitea/web-platform.js');
-const contentModules = ['src/refresh.js', 'src/styles.js', 'src/recency.js', 'src/parser.js', 'src/gitea.js', 'src/gitea-authors.js', 'src/render.js', 'src/transport.js'];
+const contentModules = ['src/refresh.js', 'src/styles.js', 'src/recency.js', 'src/parser.js', 'src/gitea.js', 'src/gitea-authors.js', 'src/render.js', 'src/transport.js', 'gitea/live.js'];
 let content = read('src/content.js');
 content = content.replace("    LCSites.current = LCSites.find(location.href, (await chrome.storage.local.get('giteaSites')).giteaSites);", "    if (document.querySelector('[data-lc-owned]')) return;\n    document.documentElement.dataset.lcWeb = '1';\n    LCSites.current = LCWeb.site;");
 content = content.replace('            if (result?.ok) {', '            if (result?.invalidated) { cache.clear(); paused = true; }\n            if (result?.ok) {');

@@ -16,6 +16,16 @@ The installer expects a Docker container with the `gitea` executable and `git` u
 
 Existing footer content is preserved. Updates replace only this package's recognized one-line include; unfamiliar edits are refused. A failed installation restores the prior footer/assets and attempts a restart. Review the result log and page before declaring success. Runtime JavaScript changes can be served without restarting, but cached assets may persist. Changing the footer asset revision requires a restart because production templates are loaded at startup.
 
+## Automatic page updates
+
+The server deployment checks the visible issue/PR conversation or list every 30 seconds with one same-origin HTML GET. It applies changed conversation entries, review summaries, reactions and list rows without reloading the document. Existing Gitea global observers initialize inserted controls. A list change refreshes visible Last Comment badges through the existing bounded request queue. Code/diff tabs, PR merge controls and sidebar widgets are not replaced.
+
+The **자동 반영 켜짐 · 30초** button disables/enables this browser's site preference. Hidden/offline pages stop polling. Network failures back off up to five minutes. Each response has a 12-second deadline and 12 MB decoded-byte bound. There is no new NAS daemon, public port, webhook or database query loop independent of an open browser.
+
+Updates pause while a visible editor contains a draft, an input/editor is focused, text is selected, a menu/modal is open or bulk-selection checkboxes are checked. Scroll position is anchored to the visible conversation/list entry. A draft can therefore defer updates beyond 30 seconds. This is periodic HTML reconciliation rather than instant server push. Long threads and many simultaneously visible users increase server rendering and transfer cost.
+
+Live verification on 2026-10-15 used VMS PR 9: adding an eyes reaction through tea appeared on the open page without navigation; the reaction was then removed. A temporary unsent editor draft paused reconciliation and remained intact across the next interval. The observed response was about 183 KB decoded HTML, with headers received about 120 ms after request start. These are one-page observations, not a concurrent-user load measurement. The Gitea container retained its 2026-10-08 start timestamp; deployment did not restart it. No test code or test suite was created or run.
+
 ## Storage and privacy
 
 - Requests only read ordinary comments from the current Gitea origin with the existing browser login. The UI does not read cookie/token values or post repository comments.

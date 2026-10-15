@@ -128,6 +128,7 @@
                 await new Promise(resolve => setTimeout(resolve, 500)); diagnosticQueries.delete(id);
                 return { schemaVersion: 1, version: runtime.getManifest().version, localOnly: true, pages: reports };
             }
+            if (message.type === 'LC_LIVE_REFRESH') { sendContent({ type: 'LC_REFRESH' }); return { ok: true }; }
             if (message.type === 'LC_OPTIONS') { runtime.openOptionsPage(); return { ok: true }; }
             if (message.type === 'LC_SITE_ACCESS') return { ok: true, allowed: true };
             throw new Error('LC_WEB_MESSAGE');
