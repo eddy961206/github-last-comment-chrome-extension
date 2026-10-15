@@ -30,14 +30,18 @@
         // Fail closed on unknown pagination rather than mislabel a partial result.
         if (timeline.querySelector('.pagination, .load-more, [data-next-page], [data-has-more="true"]')) throw fail('INCOMPLETE');
         const comments = new Map();
-        for (const row of timeline.children) {
+        for (const entry of timeline.children) {
+            // Review summaries wrap their comment and timestamp in separate siblings.
+            const review = entry.matches('.timeline-item-group') && entry.querySelector(':scope > .event[id^="pullrequestreview-"]');
+            const row = review ? entry.querySelector(':scope > .timeline-item.comment') : entry;
+            if (review && !row) continue; // A review without a summary body is an event.
             // Gitea places its PR merge controls in the timeline with a comment class.
             if (!row.matches('.timeline-item.comment') || row === first || row.matches('.form, .pull-merge-box')) continue;
-            const match = row.id.match(/^issuecomment-(\d+)$/);
+            const match = (review ? entry.id : row.id).match(/^issuecomment-(\d+)$/);
             if (!match) throw fail('COMMENT_SHAPE');
             const header = row.querySelector(':scope > .comment-container > .comment-header');
             const left = header?.querySelector('.comment-header-left');
-            const time = left?.querySelector('relative-time[datetime],time[datetime]')?.getAttribute('datetime');
+            const time = (review ? review.querySelector('.comment-text-line') : left)?.querySelector('relative-time[datetime],time[datetime]')?.getAttribute('datetime');
             if (!left || !Number.isFinite(Date.parse(time))) throw fail('COMMENT_SHAPE');
             const actor = author(left, info), name = actor ? actor.login : '';
             const body = row.querySelector(':scope > .comment-container > .comment-body');
